@@ -43,19 +43,17 @@ async function fetchTransactions() {
 
     if (error) {
         console.error('抓取雲端數據失敗:', error);
-        alert('同步帳本資料失敗，請確認 transactions 的 RLS 權限。');
+        alert('同步帳本資料失敗，請確認 RLS 權限。');
         return;
     }
 
     state.transactions = data || [];
     recalculateBalances();
-    
-    // 確保留端資料撈完後，如果是帳本頁面就立刻重繪
     if (state.currentTab === 'book') renderBookPage();
 }
 
 // ==========================================
-// 4. 核心：帳本明細頁面渲染（完全整合反駁圓鈕與正中央留言板）
+// 4. 核心：帳本明細頁面渲染（駁回圓鈕與中間留言板）
 // ==========================================
 function renderBookPage() {
     const mainContent = document.getElementById('main-content');
@@ -81,7 +79,7 @@ function renderBookPage() {
     } else {
         filteredList.forEach(item => {
             const isIncome = item.type === 'income';
-            if (isIncome) return; // 穩穩跳過收入卡片，不出現在帳本
+            if (isIncome) return; // 跳過收入卡片
 
             const isMyTx = (state.userRole === 'boyfriend' && item.by === '男友') || (state.userRole === 'girlfriend' && item.by === '女友');
             const isDisapproved = item.status === 'disapproved';
@@ -105,7 +103,7 @@ function renderBookPage() {
                 commentsListHtml += `</div>`;
             }
 
-            // 🎯 按鈕視覺完美替換：如果是對方的消費，將 [?] 改成超直覺的「反駁」圓鈕
+            // 🎯 按鈕視覺切換：如果是對方的消費，顯示「駁回」圓鈕
             let actionButtonsHtml = '';
             if (isMyTx) {
                 actionButtonsHtml = `
@@ -225,7 +223,7 @@ window.deleteTransaction = async function(id) {
 };
 
 // ==========================================
-// 5. 收入頁面渲染（完美防手機版跑版）
+// 5. 收入頁面渲染（完全整合 RWD）
 // ==========================================
 function renderIncomeSavePage() {
     const mainContent = document.getElementById('main-content');
@@ -262,7 +260,7 @@ function renderIncomeSavePage() {
             <div class="flex flex-col sm:flex-row gap-3">
                 <input type="text" id="income-title" placeholder="來源說明 (如:薪水、打工)..." class="w-full sm:flex-2 bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-xs text-slate-200 focus:outline-none">
                 <input type="number" id="income-amount" placeholder="金額" class="w-full sm:flex-1 bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-xs text-slate-200 focus:outline-none">
-                <button onclick="submitIncome()" class="w-full sm:w-auto px-6 py-2.5 bg-pink-500/20 text-pink-300 border border-pink-500/30 text-xs rounded-xl cursor-pointer hover:bg-pink-500/30 active:scale-95 transition-all">登記</button>
+                <button onclick="submitIncome()" class="w-full sm:w-auto px-6 py-2.5 bg-pink-500/20 text-pink-300 border border-pink-500/30 text-xs rounded-xl cursor-pointer">登記</button>
             </div>
         </div>
         <div class="space-y-2">
@@ -408,7 +406,6 @@ window.setStatsDimension = function(dimension) { statsDimension = dimension; ren
 // 8. 互動模組：反駁與留言核心
 // ==========================================
 window.toggleQuickReject = async function(id) {
-    // 🚀 核心優化：這裡加上 String() 強制轉型，才能精準觸發反駁功能！
     const tx = state.transactions.find(t => String(t.id) === String(id));
     if (!tx) return;
     const nextStatus = tx.status === 'disapproved' ? 'approved' : 'disapproved';
