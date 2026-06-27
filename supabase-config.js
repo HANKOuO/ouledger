@@ -1,8 +1,8 @@
 // ==========================================
 // 1. Supabase 雲端基礎配置
 // ==========================================
-const SUPABASE_URL = "https://qjrbjwqnuxpybjmglhbp.supabase.co";
-const SUPABASE_KEY = "YOUR_SUPABASE_PUBLISHABLE_KEY"; // 👈 貼上你真實的 sb_publishable... 開頭密鑰
+const SUPABASE_URL = "https://kqkzcxfcirrarlftmdvl.supabase.co/rest/v1/";
+const SUPABASE_KEY = "sb_publishable_rE3TcOeDodvIqCQLY9FFYA_MRgkdxTi"; // 👈 貼上你真實的 sb_publishable... 開頭密鑰
 
 // 全域共用的 Supabase 連線實例
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
