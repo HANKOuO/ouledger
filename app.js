@@ -72,7 +72,6 @@ function renderBookPage() {
         </div>
     `;
 
-    // 🌟 先算一下扣除收入後，真正要顯示的支出卡片數量
     const hasVisibleExpenses = filteredList.some(item => item.type !== 'income');
 
     if (!hasVisibleExpenses) {
@@ -80,9 +79,7 @@ function renderBookPage() {
     } else {
         filteredList.forEach(item => {
             const isIncome = item.type === 'income';
-            
-            // 🔥 關鍵這行：收入不要變成卡片出現在帳本中
-            if (isIncome) return; 
+            if (isIncome) return; // 跳過收入卡片
 
             const isMyTx = (state.userRole === 'boyfriend' && item.by === '男友') || (state.userRole === 'girlfriend' && item.by === '女友');
             const isDisapproved = item.status === 'disapproved';
@@ -90,30 +87,43 @@ function renderBookPage() {
 
             let amountDisplay = `<span class="text-slate-200 font-mono text-sm tracking-tight">-NT$${txAmount.toLocaleString()}</span>`;
 
+            // 💬 歷史留言渲染（置於卡片正中間區塊）
             let commentsListHtml = '';
             if (Array.isArray(item.comments) && item.comments.length > 0) {
-                commentsListHtml = `<div class="mt-2 space-y-1 bg-white/5 p-2 rounded-xl border border-white/5 text-[11px]">`;
+                commentsListHtml = `<div class="mt-1 space-y-1.5 bg-white/5 p-3 rounded-xl border border-white/5 text-[11px]">`;
                 item.comments.forEach(c => {
                     const isBf = c.author === '男友';
                     commentsListHtml += `
-                        <div class="leading-relaxed">
-                            <span class="${isBf ? 'text-blue-400' : 'text-pink-400'} font-medium">${c.author}：</span>
-                            <span class="text-slate-300">${c.text}</span>
+                        <div class="leading-relaxed flex items-start gap-1">
+                            <span class="${isBf ? 'text-blue-400' : 'text-pink-400'} font-medium shrink-0">${c.author}：</span>
+                            <span class="text-slate-300 break-all">${c.text}</span>
                         </div>
                     `;
                 });
                 commentsListHtml += `</div>`;
             }
 
-            let actionButtonsHtml = isMyTx ? `
-                <button onclick="openTransactionModal('${item.id}')" class="text-[9px] text-slate-400 border border-white/5 bg-white/5 px-2.5 py-0.5 rounded-full cursor-pointer hover:bg-white/10">編輯</button>
-                <button onclick="deleteTransaction('${item.id}')" class="text-[9px] text-rose-400/80 border border-rose-500/10 bg-rose-500/5 px-2.5 py-0.5 rounded-full cursor-pointer hover:bg-rose-500/10">刪除</button>
-            ` : `
-                <button onclick="toggleQuickReject('${item.id}')" class="text-[10px] ${isDisapproved ? 'text-rose-400 bg-rose-500/10 border-rose-500/30' : 'text-amber-400/90 border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10'} px-3 py-0.5 rounded-full font-bold cursor-pointer transition-all">${isDisapproved ? '(?)[已點]' : '[?]'}</button>
-            `;
+            // 🎯 升級：如果是對方的消費，將 [?] 改成超好看的「反駁」或「已反駁」按鈕
+            let actionButtonsHtml = '';
+            if (isMyTx) {
+                actionButtonsHtml = `
+                    <button onclick="openTransactionModal('${item.id}')" class="text-[9px] text-slate-400 border border-white/5 bg-white/5 px-2.5 py-0.5 rounded-full cursor-pointer hover:bg-white/10">編輯</button>
+                    <button onclick="deleteTransaction('${item.id}')" class="text-[9px] text-rose-400/80 border border-rose-500/10 bg-rose-500/5 px-2.5 py-0.5 rounded-full cursor-pointer hover:bg-rose-500/10">刪除</button>
+                `;
+            } else {
+                actionButtonsHtml = `
+                    <button onclick="toggleQuickReject('${item.id}')" class="text-[10px] px-3 py-0.5 rounded-full font-medium cursor-pointer transition-all duration-200 border ${
+                        isDisapproved 
+                        ? 'bg-rose-500/20 text-rose-400 border-rose-500/40 shadow-sm shadow-rose-500/10' // 已認同（反駁成功狀態）
+                        : 'bg-amber-500/5 text-amber-400/90 border-amber-500/20 hover:bg-amber-500/10' // 未反駁狀態
+                    }">
+                        ${isDisapproved ? '取消反駁' : '反駁'}
+                    </button>
+                `;
+            }
 
             htmlContent += `
-                <div class="glass-panel p-4 rounded-2xl space-y-3 relative transition-all duration-300 ${isDisapproved ? 'border-l-2 border-red-500/40' : ''}">
+                <div class="glass-panel p-4 rounded-2xl space-y-3 relative transition-all duration-300 ${isDisapproved ? 'border-l-2 border-rose-500/50 bg-rose-950/5' : ''}">
                     <div class="flex justify-between items-start">
                         <div class="space-y-1">
                             <div class="flex items-center gap-2">
@@ -121,7 +131,7 @@ function renderBookPage() {
                                 <span class="text-[8px] px-1.5 py-0.2 rounded-md ${item.type === 'shared' ? 'bg-purple-500/10 text-purple-400' : 'bg-blue-500/10 text-blue-400'}">
                                     ${item.type === 'shared' ? '共同' : '個人'}
                                 </span>
-                                ${isDisapproved ? '<div class="text-[8px] bg-red-500/10 text-red-400 px-1.5 py-0.5 rounded">未認同消費</div>' : ''}
+                                ${isDisapproved ? '<div class="text-[8px] bg-rose-500/10 text-rose-400 px-1.5 py-0.5 rounded font-medium">⚠️ 未認同消費</div>' : ''}
                             </div>
                             <p class="text-[10px] text-slate-500 font-mono tracking-wider">${item.date} // 記錄者：${item.by}</p>
                         </div>
@@ -488,18 +498,14 @@ window.addComment = async function(id) {
     const commentText = inputEl.value.trim();
     const currentAuthor = state.userRole === 'boyfriend' ? '男友' : '女友';
 
-    // 🌟 🔥 核心修復：強制轉成字串比對，確保數字 5 與字串 '5' 能夠完美 match 找到資料！
+    // 強制型態轉字串比對
     const tx = state.transactions.find(t => String(t.id) === String(id));
-    
     if (!tx) {
-        console.error('留言失敗：在本地 transactions 陣列中找不到該筆 ID:', id);
+        console.error('找不到該筆交易紀錄:', id);
         return;
     }
 
-    // 確保留言結構存在
     const currentComments = Array.isArray(tx.comments) ? tx.comments : [];
-
-    // 塞入新留言
     const updatedComments = [
         ...currentComments,
         { 
@@ -510,23 +516,21 @@ window.addComment = async function(id) {
     ];
 
     try {
-        // 發送 UPDATE 到 Supabase
         const { error } = await supabaseClient
             .from('transactions')
             .update({ comments: updatedComments })
             .eq('id', id);
 
-        if (error) {
-            console.error('留言同步雲端失敗:', error);
-            return alert('留言失敗: ' + error.message);
-        }
+        if (error) return alert('留言失敗: ' + error.message);
 
-        // 成功後清空並重拉資料刷新畫面
         inputEl.value = '';
-        await fetchTransactions();
+        
+        // 🚀 重點：重新抓取雲端最新資料，並「強制立刻重新渲染」當前頁面！
+        await fetchTransactions(); 
+        if (state.currentTab === 'book') renderBookPage();
 
     } catch (err) {
-        console.error('留言程序崩潰：', err);
+        console.error('留言出錯:', err);
     }
 };
 
