@@ -5,8 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>我們的存摺 - 抽象幾何誌</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+    .glass-panel {
+        background: rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+    }
+    .active-tab {
+        background: rgba(244, 63, 94, 0.1);
+        border: 1px border rgba(244, 63, 94, 0.2);
+    }
+</style>
 </head>
 <body class="bg-[#070a13] min-h-screen text-slate-300 font-sans antialiased overflow-x-hidden">
 
