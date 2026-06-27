@@ -83,6 +83,24 @@ function renderBookPage() {
                 <button onclick="toggleQuickReject('${item.id}')" class="text-[10px] ${isDisapproved ? 'text-rose-400 bg-rose-500/10 border-rose-500/30' : 'text-amber-400/90 border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10'} px-3 py-0.5 rounded-full font-bold cursor-pointer transition-all">${isDisapproved ? '(?)[已點]' : '[?]'}</button>
             `;
 
+            // 🌟 在 renderBookPage 的迴圈內，產生卡片 HTML 的地方加上這段：
+let commentsListHtml = '';
+if (Array.isArray(item.comments) && item.comments.length > 0) {
+    commentsListHtml = `<div class="mt-2 space-y-1 bg-white/5 p-2 rounded-xl border border-white/5 text-[11px]">`;
+    item.comments.forEach(c => {
+        const isBf = c.author === '男友';
+        commentsListHtml += `
+            <div class="leading-relaxed">
+                <span class="${isBf ? 'text-blue-400' : 'text-pink-400'} font-medium">${c.author}：</span>
+                <span class="text-slate-300">${c.text}</span>
+            </div>
+        `;
+    });
+    commentsListHtml += `</div>`;
+}
+
+// 接著把 ${commentsListHtml} 塞進你卡片 HTML 想顯示的地方即可！
+
             htmlContent += `
                 <div class="glass-panel p-4 rounded-2xl space-y-3 relative transition-all duration-300 ${isDisapproved ? 'border-l-2 border-red-500/40' : ''}">
                     <div class="flex justify-between items-start">
@@ -430,13 +448,53 @@ window.toggleQuickReject = async function(id) {
     await fetchTransactions();
 };
 
-window.addComment = function(id) {
+// ==========================================
+// 🚀 全新升級：留言同步寫入 Supabase 雲端資料庫
+// ==========================================
+window.addComment = async function(id) {
     const inputEl = document.getElementById(`comment-input-${id}`);
     if (!inputEl || !inputEl.value.trim()) return;
+
+    const commentText = inputEl.value.trim();
+    const currentAuthor = state.userRole === 'boyfriend' ? '男友' : '女友';
+
+    // 1. 先從當前本地 state 找到這一筆交易紀錄
     const tx = state.transactions.find(t => t.id === id);
-    if (!tx.comments) tx.comments = [];
-    tx.comments.push({ author: state.userRole === 'boyfriend' ? '男友' : '女友', text: inputEl.value.trim() });
-    inputEl.value = ''; renderBookPage();
+    if (!tx) return;
+
+    // 2. 確保它有留言陣列結構（如果雲端原本是 null 就初始化成空陣列）
+    const currentComments = Array.isArray(tx.comments) ? tx.comments : [];
+
+    // 3. 把新留言塞進這個陣列裡
+    const updatedComments = [
+        ...currentComments,
+        { 
+            author: currentAuthor, 
+            text: commentText,
+            time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
+        }
+    ];
+
+    try {
+        // 4. 關鍵：直接發送 UPDATE 請求到 Supabase
+        const { error } = await supabaseClient
+            .from('transactions')
+            .update({ comments: updatedComments }) // 🔥 更新 jsonb 欄位
+            .eq('id', id);
+
+        if (error) {
+            console.error('留言同步雲端失敗:', error);
+            return alert('留言失敗: ' + error.message);
+        }
+
+        // 5. 成功後清空輸入框，並重新拉取最新數據刷新畫面
+        inputEl.value = '';
+        await fetchTransactions();
+
+    } catch (err) {
+        console.error('留言程序崩潰：', err);
+        alert('留言發生未知異常。');
+    }
 };
 
 window.purgeData = function() { if (confirm('確定要清除所有暫存？')) { state.transactions = []; state.incomeLogs = []; recalculateBalances(); if (state.currentTab === 'book') renderBookPage(); alert('資料已抹除'); } };
