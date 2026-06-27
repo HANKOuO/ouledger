@@ -224,21 +224,38 @@ function renderIncomeSavePage() {
     `;
 }
 
-window.submitIncome = function() {
+window.submitIncome = async function() {
     const title = document.getElementById('income-title').value.trim();
     const amount = parseFloat(document.getElementById('income-amount').value);
+    const currentBy = state.userRole === 'boyfriend' ? '男友' : '女友';
 
     if (!title || isNaN(amount) || amount <= 0) return alert('// 請填入項目與金額');
 
-    state.incomeLogs.unshift({
-        id: 'in_' + Date.now(), title: title, amount: amount, by: state.userRole === 'boyfriend' ? '男友' : '女友',
-        date: new Date().toLocaleDateString('zh-TW', {month: '2-digit', day: '2-digit'}).replace('/', '.')
-    });
+    // 🚀 升級：直接把收入寫進雲端 transactions 資料表，型態標記為 'income'
+    const { error } = await supabaseClient
+        .from('transactions')
+        .insert([{
+            title: `💰 收入：${title}`,
+            amount: amount,
+            date: new Date().toLocaleDateString('zh-TW', {month: '2-digit', day: '2-digit'}).replace('/', '.'),
+            by: currentBy,
+            type: 'income', // 🔥 核心：標記為收入型態
+            status: 'approved',
+            comments: []
+        }]);
 
-    if (state.userRole === 'boyfriend') state.personalIncomes.boyfriend += amount;
-    else state.personalIncomes.girlfriend += amount;
+    if (error) {
+        console.error('收入寫入雲端失敗:', error);
+        return alert('登記收入失敗: ' + error.message);
+    }
 
-    recalculateBalances(); renderIncomeSavePage();
+    // 成功後清空輸入框，並重新向雲端抓取最新數據
+    document.getElementById('income-title').value = '';
+    document.getElementById('income-amount').value = '';
+    await fetchTransactions(); // 這會觸發重新計算與刷新畫面
+    
+    // 如果此時在收入頁面，順便重新渲染該頁
+    if (state.currentTab === 'save') renderIncomeSavePage();
 };
 
 // ==========================================
@@ -305,56 +322,102 @@ window.submitPoolTransaction = async function() {
 // 6. 財務計算核心引擎與統計
 // ==========================================
 function recalculateBalances() {
-    let bfSpent = 0, gfSpent = 0, sharedExpenses = 0, sharedDeposits = 0;
+    // 初始金額全部從 0 開始
+    let bfIncome = 0, gfIncome = 0;
+    let bfSpent = 0, gfSpent = 0;
+    let sharedExpenses = 0, sharedDeposits = 0;
+    
+    // 清空歷史收入紀錄，準備從雲端重新撈取分類
+    state.incomeLogs = [];
 
     state.transactions.forEach(tx => {
         const txAmount = parseFloat(tx.amount) || 0;
-        if (tx.type === 'shared') {
+        
+        // A. 處理雲端收入
+        if (tx.type === 'income') {
+            // 把這筆雲端收入塞進歷史清單顯示
+            state.incomeLogs.push(tx);
+            
+            if (tx.by === '男友') bfIncome += txAmount;
+            if (tx.by === '女友') gfIncome += txAmount;
+        } 
+        // B. 處理共同公帳（提撥 or 共同消費）
+        else if (tx.type === 'shared') {
             if (tx.title.includes('📥')) sharedDeposits += txAmount; 
             else sharedExpenses += txAmount; 
-        } else if (tx.status !== 'disapproved') {
+        } 
+        // C. 處理個人日常消費
+        else if (tx.status !== 'disapproved') {
             if (tx.by === '男友') bfSpent += txAmount;
             if (tx.by === '女友') gfSpent += txAmount;
         }
     });
 
-    state.balances.boyfriend = state.personalIncomes.boyfriend - bfSpent;
-    state.balances.girlfriend = state.personalIncomes.girlfriend - gfSpent;
+    // 核心財務公式
+    state.personalIncomes.boyfriend = bfIncome;
+    state.personalIncomes.girlfriend = gfIncome;
+
+    state.balances.boyfriend = bfIncome - bfSpent;
+    state.balances.girlfriend = gfIncome - gfSpent;
     state.balances.shared = sharedDeposits - sharedExpenses;
 
+    // 將數字同步渲染到美美的前端介面上
     document.getElementById('bfd-balance').innerText = `NT$${state.balances.boyfriend.toLocaleString()}`;
     document.getElementById('gfd-balance').innerText = `NT$${state.balances.girlfriend.toLocaleString()}`;
     document.getElementById('shared-balance').innerText = `NT$${state.balances.shared.toLocaleString()}`;
 }
 
+// ==========================================
+// 核心統計頁面渲染（精準分離 共同 / 男友 / 女友 支出）
+// ==========================================
 function renderStatsPage() {
     const mainContent = document.getElementById('main-content');
-    let weeklyExpense = 0, monthlyIncome = 0, monthlyExpense = 0;
+    if (!mainContent) return;
 
-    monthlyIncome = statsDimension === 'all' ? (state.personalIncomes.boyfriend + state.personalIncomes.girlfriend) : state.personalIncomes[statsDimension];
+    let totalExpense = 0;
 
     state.transactions.forEach(tx => {
-        const matchBf = (statsDimension === 'boyfriend' && tx.by === '男友' && tx.type === 'personal');
-        const matchGf = (statsDimension === 'girlfriend' && tx.by === '女友' && tx.type === 'personal');
-        const matchShared = (statsDimension === 'all' && tx.type === 'shared');
-        const matchAll = (statsDimension === 'all');
+        const txAmount = parseFloat(tx.amount) || 0;
+        
+        // ❌ 過濾掉收入 (income) 與 公帳提撥 (📥)，我們只統計真正的「消費支出」
+        if (tx.type === 'income' || tx.title.includes('📥')) return;
+        if (tx.status === 'disapproved') return; // 如果被對方點了「未認同」，也不納入統計
 
-        if ((matchBf || matchGf || matchShared || matchAll) && !tx.title.includes('📥')) {
-            const txAmount = parseFloat(tx.amount) || 0;
-            monthlyExpense += txAmount;
-            weeklyExpense += txAmount;
+        // 🌟 核心分流邏輯
+        if (statsDimension === 'all') {
+            // A. 當切換到「共同」：只計算 type 是共同公帳的消費
+            if (tx.type === 'shared') {
+                totalExpense += txAmount;
+            }
+        } else if (statsDimension === 'boyfriend') {
+            // B. 當切換到「男友」：只計算男友個人的專屬消費
+            if (tx.by === '男友' && tx.type === 'personal') {
+                totalExpense += txAmount;
+            }
+        } else if (statsDimension === 'girlfriend') {
+            // C. 當切換到「女友」：只計算女友個人的專屬消費
+            if (tx.by === '女友' && tx.type === 'personal') {
+                totalExpense += txAmount;
+            }
         }
     });
 
+    // 重新刷寫統計頁面的 HTML 結構
     mainContent.innerHTML = `
-        <div class="grid grid-cols-3 gap-2 p-1 bg-white/5 rounded-xl text-[11px] font-medium">
-            <button onclick="setStatsDimension('all')" class="py-1.5 rounded-lg text-center ${statsDimension === 'all' ? 'bg-white/10 text-slate-200' : 'text-slate-500'}">共同</button>
-            <button onclick="setStatsDimension('boyfriend')" class="py-1.5 rounded-lg text-center ${statsDimension === 'boyfriend' ? 'bg-blue-500/10 text-blue-400' : 'text-slate-500'}">男友</button>
-            <button onclick="setStatsDimension('girlfriend')" class="py-1.5 rounded-lg text-center ${statsDimension === 'girlfriend' ? 'bg-pink-500/10 text-pink-400' : 'text-slate-500'}">女友</button>
+        <div class="grid grid-cols-3 gap-2 p-1 bg-white/5 rounded-xl text-[11px] font-medium border border-white/5">
+            <button onclick="setStatsDimension('all')" class="py-2 rounded-lg text-center cursor-pointer transition-all ${statsDimension === 'all' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'text-slate-500'}">共同支出</button>
+            <button onclick="setStatsDimension('boyfriend')" class="py-2 rounded-lg text-center cursor-pointer transition-all ${statsDimension === 'boyfriend' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'text-slate-500'}">男友個人</button>
+            <button onclick="setStatsDimension('girlfriend')" class="py-2 rounded-lg text-center cursor-pointer transition-all ${statsDimension === 'girlfriend' ? 'bg-pink-500/10 text-pink-400 border border-pink-500/20' : 'text-slate-500'}">女友個人</button>
         </div>
-        <div class="glass-panel p-6 rounded-2xl text-center">
-            <p class="text-[11px] text-rose-400">總支出</p>
-            <p class="text-3xl font-light text-slate-200 mt-3">NT$ <span class="font-medium text-rose-400">${weeklyExpense.toLocaleString()}</span></p>
+
+        <div class="glass-panel p-6 rounded-2xl text-center relative overflow-hidden">
+            <p class="text-[10px] font-mono tracking-widest text-slate-500">// 數據分類統計</p>
+            <h3 class="text-xs font-light text-slate-300 mt-2">
+                ${statsDimension === 'all' ? '👥 雙人共同公帳總流出' : statsDimension === 'boyfriend' ? '🙋‍♂️ 男友個人生活總花費' : '🙋‍♀️ 女友個人生活總花費'}
+            </h3>
+            <p class="text-3xl font-light text-slate-200 mt-4 tracking-tight">
+                NT$ <span class="font-medium ${statsDimension === 'all' ? 'text-emerald-400' : statsDimension === 'boyfriend' ? 'text-blue-400' : 'text-pink-400'}">${totalExpense.toLocaleString()}</span>
+            </p>
         </div>
     `;
 }
