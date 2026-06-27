@@ -49,11 +49,13 @@ async function fetchTransactions() {
 
     state.transactions = data || [];
     recalculateBalances();
-    renderBookPage();
+    
+    // 確保留端資料撈完後，如果是帳本頁面就立刻重繪
+    if (state.currentTab === 'book') renderBookPage();
 }
 
 // ==========================================
-// 核心：帳本明細頁面渲染（全面修復收入符號與留言板）
+// 4. 核心：帳本明細頁面渲染（完全整合反駁圓鈕與正中央留言板）
 // ==========================================
 function renderBookPage() {
     const mainContent = document.getElementById('main-content');
@@ -79,7 +81,7 @@ function renderBookPage() {
     } else {
         filteredList.forEach(item => {
             const isIncome = item.type === 'income';
-            if (isIncome) return; // 跳過收入卡片
+            if (isIncome) return; // 穩穩跳過收入卡片，不出現在帳本
 
             const isMyTx = (state.userRole === 'boyfriend' && item.by === '男友') || (state.userRole === 'girlfriend' && item.by === '女友');
             const isDisapproved = item.status === 'disapproved';
@@ -87,7 +89,7 @@ function renderBookPage() {
 
             let amountDisplay = `<span class="text-slate-200 font-mono text-sm tracking-tight">-NT$${txAmount.toLocaleString()}</span>`;
 
-            // 💬 歷史留言渲染（置於卡片正中間區塊）
+            // 💬 歷史留言渲染區塊（置於卡片正中間）
             let commentsListHtml = '';
             if (Array.isArray(item.comments) && item.comments.length > 0) {
                 commentsListHtml = `<div class="mt-1 space-y-1.5 bg-white/5 p-3 rounded-xl border border-white/5 text-[11px]">`;
@@ -103,7 +105,7 @@ function renderBookPage() {
                 commentsListHtml += `</div>`;
             }
 
-            // 🎯 升級：如果是對方的消費，將 [?] 改成超好看的「反駁」或「已反駁」按鈕
+            // 🎯 按鈕視覺完美替換：如果是對方的消費，將 [?] 改成超直覺的「反駁」圓鈕
             let actionButtonsHtml = '';
             if (isMyTx) {
                 actionButtonsHtml = `
@@ -112,18 +114,18 @@ function renderBookPage() {
                 `;
             } else {
                 actionButtonsHtml = `
-                    <button onclick="toggleQuickReject('${item.id}')" class="text-[10px] px-3 py-0.5 rounded-full font-medium cursor-pointer transition-all duration-200 border ${
+                    <button onclick="toggleQuickReject('${item.id}')" class="text-[10px] px-3 py-1 rounded-full font-medium cursor-pointer transition-all duration-200 border ${
                         isDisapproved 
-                        ? 'bg-rose-500/20 text-rose-400 border-rose-500/40 shadow-sm shadow-rose-500/10' // 已認同（反駁成功狀態）
-                        : 'bg-amber-500/5 text-amber-400/90 border-amber-500/20 hover:bg-amber-500/10' // 未反駁狀態
+                        ? 'bg-rose-500/30 text-rose-300 border-rose-500/50 shadow-md shadow-rose-500/20' 
+                        : 'bg-white/5 text-slate-400 border-white/5 hover:bg-white/10'
                     }">
-                        ${isDisapproved ? '取消反駁' : '反駁'}
+                        ${isDisapproved ? '已駁回' : '駁回'}
                     </button>
                 `;
             }
 
             htmlContent += `
-                <div class="glass-panel p-4 rounded-2xl space-y-3 relative transition-all duration-300 ${isDisapproved ? 'border-l-2 border-rose-500/50 bg-rose-950/5' : ''}">
+                <div class="glass-panel p-4 rounded-2xl space-y-3 relative transition-all duration-300 ${isDisapproved ? 'border-l-2 border-rose-500/60 bg-rose-950/5' : ''}">
                     <div class="flex justify-between items-start">
                         <div class="space-y-1">
                             <div class="flex items-center gap-2">
@@ -159,14 +161,8 @@ window.setBookFilter = function(type) { state.filterType = type; renderBookPage(
 window.openTransactionModal = function(id = null) {
     document.getElementById('transaction-modal').classList.remove('hidden');
     if (id) {
-        // 🔥 升級這行：強制轉字串比對，徹底消滅 undefined 錯誤
         const tx = state.transactions.find(t => String(t.id) === String(id));
-        
-        if (!tx) {
-            console.error("找不到該筆交易紀錄，傳入的 id 為:", id);
-            return;
-        }
-
+        if (!tx) return;
         document.getElementById('modal-title').innerText = "// 編輯明細";
         document.getElementById('edit-id').value = tx.id;
         document.getElementById('tx-title').value = tx.title;
@@ -229,14 +225,13 @@ window.deleteTransaction = async function(id) {
 };
 
 // ==========================================
-// 核心：收入頁面渲染（完全修復手機版跑版）
+// 5. 收入頁面渲染（完美防手機版跑版）
 // ==========================================
 function renderIncomeSavePage() {
     const mainContent = document.getElementById('main-content');
     if (!mainContent) return;
     
     const currentBy = state.userRole === 'boyfriend' ? '男友' : '女友';
-
     let logsHtml = '';
     state.incomeLogs.forEach(log => {
         const isHer = log.by === '女友';
@@ -251,7 +246,6 @@ function renderIncomeSavePage() {
         `;
     });
 
-    // 🌟 重點優化：增加 md: 關鍵字，在手機（預設）垂直堆疊，在寬螢幕才變成 grid-cols-2 和橫排 flex
     mainContent.innerHTML = `
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div class="glass-panel p-4 rounded-xl text-left border-l-2 border-blue-400/50">
@@ -263,18 +257,14 @@ function renderIncomeSavePage() {
                 <p class="text-base font-semibold text-pink-200 font-mono mt-1">NT$${state.personalIncomes.girlfriend.toLocaleString()}</p>
             </div>
         </div>
-
         <div class="glass-panel p-5 rounded-2xl space-y-4">
             <p class="text-[11px] text-pink-400 font-medium tracking-wider">✍️ 登記收入 (${currentBy}視角)</p>
             <div class="flex flex-col sm:flex-row gap-3">
-                <input type="text" id="income-title" placeholder="來源說明 (如:薪水、打工)..." class="w-full sm:flex-2 bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-pink-500/20">
-                <input type="number" id="income-amount" placeholder="金額" class="w-full sm:flex-1 bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-pink-500/20">
-                <button onclick="submitIncome()" class="w-full sm:w-auto px-6 py-2.5 bg-pink-500/20 text-pink-300 border border-pink-500/30 text-xs rounded-xl cursor-pointer hover:bg-pink-500/30 active:scale-95 transition-all shrink-0 font-medium tracking-widest">
-                    登記
-                </button>
+                <input type="text" id="income-title" placeholder="來源說明 (如:薪水、打工)..." class="w-full sm:flex-2 bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-xs text-slate-200 focus:outline-none">
+                <input type="number" id="income-amount" placeholder="金額" class="w-full sm:flex-1 bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-xs text-slate-200 focus:outline-none">
+                <button onclick="submitIncome()" class="w-full sm:w-auto px-6 py-2.5 bg-pink-500/20 text-pink-300 border border-pink-500/30 text-xs rounded-xl cursor-pointer hover:bg-pink-500/30 active:scale-95 transition-all">登記</button>
             </div>
         </div>
-
         <div class="space-y-2">
             <p class="text-[10px] text-slate-500 tracking-widest">歷史收入清單</p>
             ${state.incomeLogs.length === 0 ? '<p class="text-center py-6 text-slate-600 text-xs">尚無收入紀錄</p>' : logsHtml}
@@ -289,39 +279,25 @@ window.submitIncome = async function() {
 
     if (!title || isNaN(amount) || amount <= 0) return alert('// 請填入項目與金額');
 
-    // 🚀 升級：直接把收入寫進雲端 transactions 資料表，型態標記為 'income'
     const { error } = await supabaseClient
         .from('transactions')
         .insert([{
-            title: `💰 收入：${title}`,
-            amount: amount,
+            title: `💰 收入：${title}`, amount: amount,
             date: new Date().toLocaleDateString('zh-TW', {month: '2-digit', day: '2-digit'}).replace('/', '.'),
-            by: currentBy,
-            type: 'income', // 🔥 核心：標記為收入型態
-            status: 'approved',
-            comments: []
+            by: currentBy, type: 'income', status: 'approved', comments: []
         }]);
 
-    if (error) {
-        console.error('收入寫入雲端失敗:', error);
-        return alert('登記收入失敗: ' + error.message);
-    }
+    if (error) return alert('登記收入失敗: ' + error.message);
 
-    // 成功後清空輸入框，並重新向雲端抓取最新數據
-    document.getElementById('income-title').value = '';
-    document.getElementById('income-amount').value = '';
-    await fetchTransactions(); // 這會觸發重新計算與刷新畫面
-    
-    // 如果此時在收入頁面，順便重新渲染該頁
+    await fetchTransactions();
     if (state.currentTab === 'save') renderIncomeSavePage();
 };
 
 // ==========================================
-// 5. 共同公帳池提撥模組
+// 6. 共同公帳池提撥模組
 // ==========================================
 function renderSharedPoolPage() {
     const mainContent = document.getElementById('main-content');
-
     mainContent.innerHTML = `
         <div class="glass-panel p-6 rounded-2xl text-center relative border border-emerald-500/10">
             <p class="text-[11px] text-emerald-400 font-medium tracking-wider">共同帳戶總餘額</p>
@@ -350,188 +326,120 @@ function renderSharedPoolPage() {
 window.submitPoolTransaction = async function() {
     const amount = parseFloat(document.getElementById('pool-amount').value);
     const note = document.getElementById('pool-note').value.trim() || '共同基金提撥';
-
     if (isNaN(amount) || amount <= 0) return alert('// 請輸入有效金額');
-
-    const source = state.userRole; 
-    if (state.personalIncomes[source] < amount) return alert('// 錯誤：你的個人現有收入不足！');
-
-    state.personalIncomes[source] -= amount;
+    if (state.personalIncomes[state.userRole] < amount) return alert('// 錯誤：你的個人現有收入不足！');
 
     const { error } = await supabaseClient
         .from('transactions')
         .insert([{
-            amount: amount, 
-            title: `📥 提撥：${note}`,
+            amount: amount, title: `📥 提撥：${note}`,
             date: new Date().toLocaleDateString('zh-TW', {month: '2-digit', day: '2-digit'}).replace('/', '.'),
-            by: state.userRole === 'boyfriend' ? '男友' : '女友', 
-            type: 'shared', 
-            status: 'approved',
-            comments: []
+            by: state.userRole === 'boyfriend' ? '男友' : '女友', type: 'shared', status: 'approved', comments: []
         }]);
 
-    if (error) return alert('提撥同步雲端失敗: ' + error.message);
-
+    if (error) return alert('提撥失敗: ' + error.message);
     await fetchTransactions();
     renderSharedPoolPage();
 };
 
 // ==========================================
-// 6. 財務計算核心引擎與統計
+// 7. 財務計算核心引擎與統計
 // ==========================================
 function recalculateBalances() {
-    // 初始金額全部從 0 開始
-    let bfIncome = 0, gfIncome = 0;
-    let bfSpent = 0, gfSpent = 0;
-    let sharedExpenses = 0, sharedDeposits = 0;
-    
-    // 清空歷史收入紀錄，準備從雲端重新撈取分類
+    let bfIncome = 0, gfIncome = 0, bfSpent = 0, gfSpent = 0, sharedExpenses = 0, sharedDeposits = 0;
     state.incomeLogs = [];
 
     state.transactions.forEach(tx => {
         const txAmount = parseFloat(tx.amount) || 0;
-        
-        // A. 處理雲端收入
         if (tx.type === 'income') {
-            // 把這筆雲端收入塞進歷史清單顯示
             state.incomeLogs.push(tx);
-            
             if (tx.by === '男友') bfIncome += txAmount;
             if (tx.by === '女友') gfIncome += txAmount;
-        } 
-        // B. 處理共同公帳（提撥 or 共同消費）
-        else if (tx.type === 'shared') {
+        } else if (tx.type === 'shared') {
             if (tx.title.includes('📥')) sharedDeposits += txAmount; 
             else sharedExpenses += txAmount; 
-        } 
-        // C. 處理個人日常消費
-        else if (tx.status !== 'disapproved') {
+        } else if (tx.status !== 'disapproved') {
             if (tx.by === '男友') bfSpent += txAmount;
             if (tx.by === '女友') gfSpent += txAmount;
         }
     });
 
-    // 核心財務公式
     state.personalIncomes.boyfriend = bfIncome;
     state.personalIncomes.girlfriend = gfIncome;
-
     state.balances.boyfriend = bfIncome - bfSpent;
     state.balances.girlfriend = gfIncome - gfSpent;
     state.balances.shared = sharedDeposits - sharedExpenses;
 
-    // 將數字同步渲染到美美的前端介面上
     document.getElementById('bfd-balance').innerText = `NT$${state.balances.boyfriend.toLocaleString()}`;
     document.getElementById('gfd-balance').innerText = `NT$${state.balances.girlfriend.toLocaleString()}`;
     document.getElementById('shared-balance').innerText = `NT$${state.balances.shared.toLocaleString()}`;
 }
 
-// ==========================================
-// 核心統計頁面渲染（精準分離 共同 / 男友 / 女友 支出）
-// ==========================================
 function renderStatsPage() {
     const mainContent = document.getElementById('main-content');
     if (!mainContent) return;
-
     let totalExpense = 0;
 
     state.transactions.forEach(tx => {
         const txAmount = parseFloat(tx.amount) || 0;
-        
-        // ❌ 過濾掉收入 (income) 與 公帳提撥 (📥)，我們只統計真正的「消費支出」
-        if (tx.type === 'income' || tx.title.includes('📥')) return;
-        if (tx.status === 'disapproved') return; // 如果被對方點了「未認同」，也不納入統計
+        if (tx.type === 'income' || tx.title.includes('📥') || tx.status === 'disapproved') return;
 
-        // 🌟 核心分流邏輯
-        if (statsDimension === 'all') {
-            // A. 當切換到「共同」：只計算 type 是共同公帳的消費
-            if (tx.type === 'shared') {
-                totalExpense += txAmount;
-            }
-        } else if (statsDimension === 'boyfriend') {
-            // B. 當切換到「男友」：只計算男友個人的專屬消費
-            if (tx.by === '男友' && tx.type === 'personal') {
-                totalExpense += txAmount;
-            }
-        } else if (statsDimension === 'girlfriend') {
-            // C. 當切換到「女友」：只計算女友個人的專屬消費
-            if (tx.by === '女友' && tx.type === 'personal') {
-                totalExpense += txAmount;
-            }
-        }
+        if (statsDimension === 'all' && tx.type === 'shared') totalExpense += txAmount;
+        else if (statsDimension === 'boyfriend' && tx.by === '男友' && tx.type === 'personal') totalExpense += txAmount;
+        else if (statsDimension === 'girlfriend' && tx.by === '女友' && tx.type === 'personal') totalExpense += txAmount;
     });
 
-    // 重新刷寫統計頁面的 HTML 結構
     mainContent.innerHTML = `
         <div class="grid grid-cols-3 gap-2 p-1 bg-white/5 rounded-xl text-[11px] font-medium border border-white/5">
             <button onclick="setStatsDimension('all')" class="py-2 rounded-lg text-center cursor-pointer transition-all ${statsDimension === 'all' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'text-slate-500'}">共同支出</button>
             <button onclick="setStatsDimension('boyfriend')" class="py-2 rounded-lg text-center cursor-pointer transition-all ${statsDimension === 'boyfriend' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'text-slate-500'}">男友個人</button>
             <button onclick="setStatsDimension('girlfriend')" class="py-2 rounded-lg text-center cursor-pointer transition-all ${statsDimension === 'girlfriend' ? 'bg-pink-500/10 text-pink-400 border border-pink-500/20' : 'text-slate-500'}">女友個人</button>
         </div>
-
         <div class="glass-panel p-6 rounded-2xl text-center relative overflow-hidden">
             <p class="text-[10px] font-mono tracking-widest text-slate-500">// 數據分類統計</p>
-            <h3 class="text-xs font-light text-slate-300 mt-2">
-                ${statsDimension === 'all' ? '👥 雙人共同公帳總流出' : statsDimension === 'boyfriend' ? '🙋‍♂️ 男友個人生活總花費' : '🙋‍♀️ 女友個人生活總花費'}
-            </h3>
-            <p class="text-3xl font-light text-slate-200 mt-4 tracking-tight">
-                NT$ <span class="font-medium ${statsDimension === 'all' ? 'text-emerald-400' : statsDimension === 'boyfriend' ? 'text-blue-400' : 'text-pink-400'}">${totalExpense.toLocaleString()}</span>
-            </p>
+            <h3 class="text-xs font-light text-slate-300 mt-2">${statsDimension === 'all' ? '👥 雙人共同公帳總流出' : statsDimension === 'boyfriend' ? '🙋‍♂️ 男友個人生活總花費' : '🙋‍♀️ 女友個人生活總花費'}</h3>
+            <p class="text-3xl font-light text-slate-200 mt-4 tracking-tight">NT$ <span class="font-medium ${statsDimension === 'all' ? 'text-emerald-400' : statsDimension === 'boyfriend' ? 'text-blue-400' : 'text-pink-400'}">${totalExpense.toLocaleString()}</span></p>
         </div>
     `;
 }
 window.setStatsDimension = function(dimension) { statsDimension = dimension; renderStatsPage(); };
 
+// ==========================================
+// 8. 互動模組：反駁與留言核心
+// ==========================================
 window.toggleQuickReject = async function(id) {
-    const tx = state.transactions.find(t => t.id === id);
+    // 🚀 核心優化：這裡加上 String() 強制轉型，才能精準觸發反駁功能！
+    const tx = state.transactions.find(t => String(t.id) === String(id));
+    if (!tx) return;
     const nextStatus = tx.status === 'disapproved' ? 'approved' : 'disapproved';
     await supabaseClient.from('transactions').update({ status: nextStatus }).eq('id', id);
     await fetchTransactions();
 };
 
-// ==========================================
-// 🚀 留言同步寫入 Supabase 雲端資料庫（修正型態對齊版）
-// ==========================================
 window.addComment = async function(id) {
     const inputEl = document.getElementById(`comment-input-${id}`);
     if (!inputEl || !inputEl.value.trim()) return;
 
     const commentText = inputEl.value.trim();
     const currentAuthor = state.userRole === 'boyfriend' ? '男友' : '女友';
-
-    // 強制型態轉字串比對
     const tx = state.transactions.find(t => String(t.id) === String(id));
-    if (!tx) {
-        console.error('找不到該筆交易紀錄:', id);
-        return;
-    }
+    if (!tx) return;
 
     const currentComments = Array.isArray(tx.comments) ? tx.comments : [];
     const updatedComments = [
         ...currentComments,
-        { 
-            author: currentAuthor, 
-            text: commentText,
-            time: new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
-        }
+        { author: currentAuthor, text: commentText }
     ];
 
-    try {
-        const { error } = await supabaseClient
-            .from('transactions')
-            .update({ comments: updatedComments })
-            .eq('id', id);
+    const { error } = await supabaseClient
+        .from('transactions')
+        .update({ comments: updatedComments })
+        .eq('id', id);
 
-        if (error) return alert('留言失敗: ' + error.message);
+    if (error) return alert('留言失敗: ' + error.message);
 
-        inputEl.value = '';
-        
-        // 🚀 重點：重新抓取雲端最新資料，並「強制立刻重新渲染」當前頁面！
-        await fetchTransactions(); 
-        if (state.currentTab === 'book') renderBookPage();
-
-    } catch (err) {
-        console.error('留言出錯:', err);
-    }
+    inputEl.value = '';
+    await fetchTransactions();
 };
 
 window.purgeData = function() { if (confirm('確定要清除所有暫存？')) { state.transactions = []; state.incomeLogs = []; recalculateBalances(); if (state.currentTab === 'book') renderBookPage(); alert('資料已抹除'); } };
