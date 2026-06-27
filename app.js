@@ -133,7 +133,14 @@ window.setBookFilter = function(type) { state.filterType = type; renderBookPage(
 window.openTransactionModal = function(id = null) {
     document.getElementById('transaction-modal').classList.remove('hidden');
     if (id) {
-        const tx = state.transactions.find(t => t.id === id);
+        // 🔥 升級這行：強制轉字串比對，徹底消滅 undefined 錯誤
+        const tx = state.transactions.find(t => String(t.id) === String(id));
+        
+        if (!tx) {
+            console.error("找不到該筆交易紀錄，傳入的 id 為:", id);
+            return;
+        }
+
         document.getElementById('modal-title').innerText = "// 編輯明細";
         document.getElementById('edit-id').value = tx.id;
         document.getElementById('tx-title').value = tx.title;
