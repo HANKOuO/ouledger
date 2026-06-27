@@ -479,7 +479,7 @@ window.toggleQuickReject = async function(id) {
 };
 
 // ==========================================
-// 🚀 全新升級：留言同步寫入 Supabase 雲端資料庫
+// 🚀 留言同步寫入 Supabase 雲端資料庫（修正型態對齊版）
 // ==========================================
 window.addComment = async function(id) {
     const inputEl = document.getElementById(`comment-input-${id}`);
@@ -488,14 +488,18 @@ window.addComment = async function(id) {
     const commentText = inputEl.value.trim();
     const currentAuthor = state.userRole === 'boyfriend' ? '男友' : '女友';
 
-    // 1. 先從當前本地 state 找到這一筆交易紀錄
-    const tx = state.transactions.find(t => t.id === id);
-    if (!tx) return;
+    // 🌟 🔥 核心修復：強制轉成字串比對，確保數字 5 與字串 '5' 能夠完美 match 找到資料！
+    const tx = state.transactions.find(t => String(t.id) === String(id));
+    
+    if (!tx) {
+        console.error('留言失敗：在本地 transactions 陣列中找不到該筆 ID:', id);
+        return;
+    }
 
-    // 2. 確保它有留言陣列結構（如果雲端原本是 null 就初始化成空陣列）
+    // 確保留言結構存在
     const currentComments = Array.isArray(tx.comments) ? tx.comments : [];
 
-    // 3. 把新留言塞進這個陣列裡
+    // 塞入新留言
     const updatedComments = [
         ...currentComments,
         { 
@@ -506,10 +510,10 @@ window.addComment = async function(id) {
     ];
 
     try {
-        // 4. 關鍵：直接發送 UPDATE 請求到 Supabase
+        // 發送 UPDATE 到 Supabase
         const { error } = await supabaseClient
             .from('transactions')
-            .update({ comments: updatedComments }) // 🔥 更新 jsonb 欄位
+            .update({ comments: updatedComments })
             .eq('id', id);
 
         if (error) {
@@ -517,13 +521,12 @@ window.addComment = async function(id) {
             return alert('留言失敗: ' + error.message);
         }
 
-        // 5. 成功後清空輸入框，並重新拉取最新數據刷新畫面
+        // 成功後清空並重拉資料刷新畫面
         inputEl.value = '';
         await fetchTransactions();
 
     } catch (err) {
         console.error('留言程序崩潰：', err);
-        alert('留言發生未知異常。');
     }
 };
 
