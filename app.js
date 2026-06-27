@@ -219,10 +219,12 @@ window.deleteTransaction = async function(id) {
 };
 
 // ==========================================
-// 4. 個人收入模組
+// 核心：收入頁面渲染（完全修復手機版跑版）
 // ==========================================
 function renderIncomeSavePage() {
     const mainContent = document.getElementById('main-content');
+    if (!mainContent) return;
+    
     const currentBy = state.userRole === 'boyfriend' ? '男友' : '女友';
 
     let logsHtml = '';
@@ -239,8 +241,9 @@ function renderIncomeSavePage() {
         `;
     });
 
+    // 🌟 重點優化：增加 md: 關鍵字，在手機（預設）垂直堆疊，在寬螢幕才變成 grid-cols-2 和橫排 flex
     mainContent.innerHTML = `
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div class="glass-panel p-4 rounded-xl text-left border-l-2 border-blue-400/50">
                 <p class="text-[9px] text-slate-500">男友現有收入</p>
                 <p class="text-base font-semibold text-blue-200 font-mono mt-1">NT$${state.personalIncomes.boyfriend.toLocaleString()}</p>
@@ -250,14 +253,18 @@ function renderIncomeSavePage() {
                 <p class="text-base font-semibold text-pink-200 font-mono mt-1">NT$${state.personalIncomes.girlfriend.toLocaleString()}</p>
             </div>
         </div>
-        <div class="glass-panel p-4 rounded-2xl space-y-3">
+
+        <div class="glass-panel p-5 rounded-2xl space-y-4">
             <p class="text-[11px] text-pink-400 font-medium tracking-wider">✍️ 登記收入 (${currentBy}視角)</p>
-            <div class="flex gap-2">
-                <input type="text" id="income-title" placeholder="來源說明..." class="flex-2 bg-white/5 border border-white/5 px-3 py-2 rounded-xl text-xs text-slate-200 focus:outline-none">
-                <input type="number" id="income-amount" placeholder="金額" class="flex-1 bg-white/5 border border-white/5 px-3 py-2 rounded-xl text-xs text-slate-200 focus:outline-none">
-                <button onclick="submitIncome()" class="px-4 bg-pink-500/20 text-pink-300 border border-pink-500/30 text-xs rounded-xl">登記</button>
+            <div class="flex flex-col sm:flex-row gap-3">
+                <input type="text" id="income-title" placeholder="來源說明 (如:薪水、打工)..." class="w-full sm:flex-2 bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-pink-500/20">
+                <input type="number" id="income-amount" placeholder="金額" class="w-full sm:flex-1 bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-pink-500/20">
+                <button onclick="submitIncome()" class="w-full sm:w-auto px-6 py-2.5 bg-pink-500/20 text-pink-300 border border-pink-500/30 text-xs rounded-xl cursor-pointer hover:bg-pink-500/30 active:scale-95 transition-all shrink-0 font-medium tracking-widest">
+                    登記
+                </button>
             </div>
         </div>
+
         <div class="space-y-2">
             <p class="text-[10px] text-slate-500 tracking-widest">歷史收入清單</p>
             ${state.incomeLogs.length === 0 ? '<p class="text-center py-6 text-slate-600 text-xs">尚無收入紀錄</p>' : logsHtml}
