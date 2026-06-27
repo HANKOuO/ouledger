@@ -52,15 +52,20 @@ async function fetchTransactions() {
     renderBookPage();
 }
 
+// ==========================================
+// 核心：帳本明細頁面渲染（全面修復收入符號與留言板）
+// ==========================================
 function renderBookPage() {
     const mainContent = document.getElementById('main-content');
     if (!mainContent) return;
 
+    // 過濾出符合當前頁籤（全部/個人/共同）的明細
     const filteredList = state.transactions.filter(item => {
         if (state.filterType === 'all') return true;
         return item.type === state.filterType;
     });
 
+    // 頁籤切換按鈕的 HTML
     let htmlContent = `
         <div class="flex gap-2 p-1 bg-white/5 rounded-xl border border-white/5 text-[11px] font-medium">
             <button onclick="setBookFilter('all')" class="flex-1 py-1.5 rounded-lg text-center cursor-pointer transition-all ${state.filterType === 'all' ? 'bg-white/10 text-slate-200' : 'text-slate-500'}">全部</button>
@@ -70,12 +75,38 @@ function renderBookPage() {
     `;
 
     if (filteredList.length === 0) {
-        htmlContent += `<div class="text-center py-12 text-slate-600 text-xs tracking-wider">尚無數據明細</div>`;
+        htmlContent += `<div class="text-center py-12 text-slate-600 text-xs tracking-wider">尚無明細數據</div>`;
     } else {
         filteredList.forEach(item => {
             const isMyTx = (state.userRole === 'boyfriend' && item.by === '男友') || (state.userRole === 'girlfriend' && item.by === '女友');
             const isDisapproved = item.status === 'disapproved';
+            const isIncome = item.type === 'income'; // 👈 判斷是否為收入
 
+            // 1. ⚙️ 動態決定右側金額的「正負號」與「顏色」
+            let amountDisplay = '';
+            if (isIncome) {
+                amountDisplay = `<span class="text-emerald-400 font-mono text-sm tracking-tight">+NT$${parseFloat(item.amount).toLocaleString()}</span>`;
+            } else {
+                amountDisplay = `<span class="text-slate-200 font-mono text-sm tracking-tight">-NT$${parseFloat(item.amount).toLocaleString()}</span>`;
+            }
+
+            // 2. 💬 核心：渲染歷史雲端留言板
+            let commentsListHtml = '';
+            if (Array.isArray(item.comments) && item.comments.length > 0) {
+                commentsListHtml = `<div class="mt-2 space-y-1 bg-white/5 p-2 rounded-xl border border-white/5 text-[11px]">`;
+                item.comments.forEach(c => {
+                    const isBf = c.author === '男友';
+                    commentsListHtml += `
+                        <div class="leading-relaxed">
+                            <span class="${isBf ? 'text-blue-400' : 'text-pink-400'} font-medium">${c.author}：</span>
+                            <span class="text-slate-300">${c.text}</span>
+                        </div>
+                    `;
+                });
+                commentsListHtml += `</div>`;
+            }
+
+            // 3. 🎯 決定操作按鈕（編輯、刪除、認同）
             let actionButtonsHtml = isMyTx ? `
                 <button onclick="openTransactionModal('${item.id}')" class="text-[9px] text-slate-400 border border-white/5 bg-white/5 px-2.5 py-0.5 rounded-full cursor-pointer hover:bg-white/10">編輯</button>
                 <button onclick="deleteTransaction('${item.id}')" class="text-[9px] text-rose-400/80 border border-rose-500/10 bg-rose-500/5 px-2.5 py-0.5 rounded-full cursor-pointer hover:bg-rose-500/10">刪除</button>
@@ -83,20 +114,36 @@ function renderBookPage() {
                 <button onclick="toggleQuickReject('${item.id}')" class="text-[10px] ${isDisapproved ? 'text-rose-400 bg-rose-500/10 border-rose-500/30' : 'text-amber-400/90 border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10'} px-3 py-0.5 rounded-full font-bold cursor-pointer transition-all">${isDisapproved ? '(?)[已點]' : '[?]'}</button>
             `;
 
-            // 🌟 在 renderBookPage 的迴圈內，產生卡片 HTML 的地方加上這段：
-let commentsListHtml = '';
-if (Array.isArray(item.comments) && item.comments.length > 0) {
-    commentsListHtml = `<div class="mt-2 space-y-1 bg-white/5 p-2 rounded-xl border border-white/5 text-[11px]">`;
-    item.comments.forEach(c => {
-        const isBf = c.author === '男友';
-        commentsListHtml += `
-            <div class="leading-relaxed">
-                <span class="${isBf ? 'text-blue-400' : 'text-pink-400'} font-medium">${c.author}：</span>
-                <span class="text-slate-300">${c.text}</span>
-            </div>
-        `;
-    });
-    commentsListHtml += `</div>`;
+            // 4. 🎴 組合整張卡片
+            htmlContent += `
+                <div class="glass-panel p-4 rounded-2xl space-y-3 relative transition-all duration-300 ${isDisapproved ? 'border-l-2 border-red-500/40' : ''}">
+                    <div class="flex justify-between items-start">
+                        <div class="space-y-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-light text-slate-200 tracking-wide">${item.title}</span>
+                                <span class="text-[8px] px-1.5 py-0.2 rounded-md ${isIncome ? 'bg-emerald-500/10 text-emerald-400' : item.type === 'shared' ? 'bg-purple-500/10 text-purple-400' : 'bg-blue-500/10 text-blue-400'}">
+                                    ${isIncome ? '收入' : item.type === 'shared' ? '共同' : '個人'}
+                                </span>
+                                ${isDisapproved ? '<div class="text-[8px] bg-red-500/10 text-red-400 px-1.5 py-0.5 rounded">未認同消費</div>' : ''}
+                            </div>
+                            <p class="text-[10px] text-slate-500 font-mono tracking-wider">${item.date} // 記錄者：${item.by}</p>
+                        </div>
+                        <div>${amountDisplay}</div> </div>
+
+                    ${commentsListHtml}
+
+                    <div class="flex justify-between items-center pt-2 border-t border-white/5 gap-3">
+                        <div class="flex-1 flex gap-1.5">
+                            <input type="text" id="comment-input-${item.id}" placeholder="留下訊息..." class="flex-1 bg-white/5 border border-white/5 rounded-lg px-2.5 py-1 text-[10px] text-slate-300 focus:outline-none focus:border-pink-500/20">
+                            <button onclick="addComment('${item.id}')" class="text-[9px] bg-white/5 text-slate-400 px-2.5 rounded-lg hover:bg-white/10 cursor-pointer">發送</button>
+                        </div>
+                        <div class="flex gap-1.5 shrink-0 items-center">${actionButtonsHtml}</div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+    mainContent.innerHTML = htmlContent;
 }
 
 // 接著把 ${commentsListHtml} 塞進你卡片 HTML 想顯示的地方即可！
