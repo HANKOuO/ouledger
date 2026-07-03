@@ -404,122 +404,76 @@ function recalculateBalances() {
     document.getElementById('shared-balance').innerText = `NT$${state.balances.shared.toLocaleString()}`;
 }
 
-// 🌟 全新設計：分月份、分人、分大類的統計頁面
+// ==========================================
+// 核心：統計頁面渲染（全面修復切換死鎖問題）
+// ==========================================
 function renderStatsPage() {
     const mainContent = document.getElementById('main-content');
     if (!mainContent) return;
-
-    // 1. 自動從全域交易明細中收集「所有的不重複月份選項」
-    let availableMonths = new Set();
-    state.transactions.forEach(tx => {
-        if (tx.date && tx.date.includes('.')) {
-            // 西元日期格式如 2026.06.28，我們切出前 7 個字 2026.06 作為月份
-            const monthPart = tx.date.substring(0, 7);
-            if (monthPart.match(/^\d{4}\.\d{2}$/)) {
-                availableMonths.add(monthPart);
-            }
-        }
-    });
-
-    // 如果完全沒有資料，預設放今年當月
-    if (availableMonths.size === 0) {
-        const now = new Date();
-        availableMonths.add(now.toLocaleDateString('zh-TW', {year: 'numeric', month: '2-digit'}).replace('/', '.'));
-    }
-
-    // 將集合轉為陣列並排序
-    const monthArray = Array.from(availableMonths).sort().reverse();
     
-    // 如果當前選擇的月份還沒設定，預設抓最新的一個
-    if (!state.currentMonthFilter || !availableMonths.has(state.currentMonthFilter)) {
-        state.currentMonthFilter = monthArray[0];
+    let totalExpense = 0;
+    
+    // 取得所有資料中不重複的月份，用來動態產生月份選單
+    const availableMonths = [...new Set(state.transactions
+        .filter(tx => tx.date && tx.date.includes('.'))
+        .map(tx => tx.date.split('.')[0])
+    )].sort((a, b) => b - a); 
+
+    if (!availableMonths.includes(currentMonthFilter) && availableMonths.length > 0) {
+        currentMonthFilter = availableMonths[0];
     }
 
-    // 2. 開始計算特定月份、特定維度的花費
-    let totalExpense = 0;
-    let categoryMap = {}; // 用於統計各大類（早餐、午餐、交通...）各花多少錢
-
+    // 計算符合「指定月份」與「指定視角」的開銷
     state.transactions.forEach(tx => {
         const txAmount = parseFloat(tx.amount) || 0;
         if (tx.type === 'income' || tx.title.includes('📥') || tx.status === 'disapproved') return;
 
-        // 檢查月份是否符合
-        const txMonth = tx.date ? tx.date.substring(0, 7) : '';
-        if (txMonth !== state.currentMonthFilter) return;
+        const txMonth = tx.date && tx.date.includes('.') ? tx.date.split('.')[0] : '';
+        if (txMonth !== currentMonthFilter) return;
 
-        // 分流加總邏輯
-        let isMatch = false;
-        if (statsDimension === 'all' && tx.type === 'shared') isMatch = true;
-        else if (statsDimension === 'boyfriend' && tx.by === '男友' && tx.type === 'personal') isMatch = true;
-        else if (statsDimension === 'girlfriend' && tx.by === '女友' && tx.type === 'personal') isMatch = true;
-
-        if (isMatch) {
-            totalExpense += txAmount;
-            const cat = tx.category || "未分類";
-            categoryMap[cat] = (categoryMap[cat] || 0) + txAmount;
-        }
+        if (statsDimension === 'all' && tx.type === 'shared') totalExpense += txAmount;
+        else if (statsDimension === 'boyfriend' && tx.by === '男友' && tx.type === 'personal') totalExpense += txAmount;
+        else if (statsDimension === 'girlfriend' && tx.by === '女友' && tx.type === 'personal') totalExpense += txAmount;
     });
 
-    // 月份下拉選單 HTML
-    let monthOptionsHtml = monthArray.map(m => `<option value="${m}" ${state.currentMonthFilter === m ? 'selected' : ''}>📅 ${m}</option>`).join('');
-
-    // 大類別統計 HTML 列表
-    let categoryListHtml = '';
-    const sortedCategories = Object.entries(categoryMap).sort((a,b) => b[1] - a[1]);
+    let monthOptionsHtml = availableMonths.map(m => 
+        `<option value="${m}" ${currentMonthFilter === m ? 'selected' : ''}>${m} 月份</option>`
+    ).join('');
     
-    if (sortedCategories.length === 0) {
-        categoryListHtml = `<p class="text-center text-[11px] text-slate-600 py-4">此月份無分類消費明細</p>`;
-    } else {
-        categoryListHtml = `<div class="space-y-2 mt-4">`;
-        sortedCategories.forEach(([catName, catAmount]) => {
-            const percentage = totalExpense > 0 ? ((catAmount / totalExpense) * 100).toFixed(0) : 0;
-            categoryListHtml += `
-                <div class="bg-white/2 p-3 rounded-xl flex justify-between items-center border border-white/5">
-                    <div class="flex items-center gap-2">
-                        <span class="text-xs text-slate-300">${catName}</span>
-                        <span class="text-[9px] font-mono text-slate-500">(${percentage}%)</span>
-                    </div>
-                    <p class="text-xs font-mono text-slate-200 font-medium">NT$${catAmount.toLocaleString()}</p>
-                </div>
-            `;
-        });
-        categoryListHtml += `</div>`;
+    if (availableMonths.length === 0) {
+        monthOptionsHtml = `<option value="">尚無月份數據</option>`;
     }
 
     mainContent.innerHTML = `
-        <!-- 月份切換選擇器 -->
-        <div class="flex items-center justify-between bg-white/5 p-3 rounded-2xl border border-white/5">
-            <span class="text-xs font-light text-slate-400">選擇統計月份</span>
-            <select onchange="changeStatsMonth(this.value)" class="bg-[#121826] border border-white/10 px-3 py-1.5 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-pink-500/30">
+        <!-- 月份選擇篩選器 -->
+        <div class="glass-panel p-3 rounded-xl flex justify-between items-center border border-white/5">
+            <span class="text-[10px] text-slate-500 font-mono uppercase tracking-widest">// 選擇統計月份</span>
+            <select id="stats-month-select" onchange="changeStatsMonth(this.value)" class="bg-white/5 border border-white/5 rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none bg-[#121826]">
                 ${monthOptionsHtml}
             </select>
         </div>
 
-        <!-- 三分流切換按鈕 -->
+        <!-- 🌟 修正點：將 onclick 改為呼叫變更後的 changeStatsDimension 避免命名衝突 -->
         <div class="grid grid-cols-3 gap-2 p-1 bg-white/5 rounded-xl text-[11px] font-medium border border-white/5">
-            <button onclick="setStatsDimension('all')" class="py-2 rounded-lg text-center cursor-pointer transition-all ${statsDimension === 'all' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'text-slate-500'}">共同支出</button>
-            <button onclick="setStatsDimension('boyfriend')" class="py-2 rounded-lg text-center cursor-pointer transition-all ${statsDimension === 'boyfriend' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'text-slate-500'}">男友個人</button>
-            <button onclick="setStatsDimension('girlfriend')" class="py-2 rounded-lg text-center cursor-pointer transition-all ${statsDimension === 'girlfriend' ? 'bg-pink-500/10 text-pink-400 border border-pink-500/20' : 'text-slate-500'}">女友個人</button>
+            <button onclick="changeStatsDimension('all')" class="py-2 rounded-lg text-center cursor-pointer transition-all ${statsDimension === 'all' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'text-slate-500'}">共同支出</button>
+            <button onclick="changeStatsDimension('boyfriend')" class="py-2 rounded-lg text-center cursor-pointer transition-all ${statsDimension === 'boyfriend' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'text-slate-500'}">男友個人</button>
+            <button onclick="changeStatsDimension('girlfriend')" class="py-2 rounded-lg text-center cursor-pointer transition-all ${statsDimension === 'girlfriend' ? 'bg-pink-500/10 text-pink-400 border border-pink-500/20' : 'text-slate-500'}">女友個人</button>
         </div>
 
-        <!-- 總花費看板 -->
+        <!-- 數據面板 -->
         <div class="glass-panel p-6 rounded-2xl text-center relative overflow-hidden">
-            <p class="text-[10px] font-mono tracking-widest text-slate-500">// ${state.currentMonthFilter} 數據總覽</p>
+            <p class="text-[10px] font-mono tracking-widest text-slate-500">// ${currentMonthFilter}月份 數據分類統計</p>
             <h3 class="text-xs font-light text-slate-300 mt-2">
                 ${statsDimension === 'all' ? '👥 雙人共同公帳總流出' : statsDimension === 'boyfriend' ? '🙋‍♂️ 男友個人生活總花費' : '🙋‍♀️ 女友個人生活總花費'}
             </h3>
-            <p class="text-3xl font-light text-slate-200 mt-4 tracking-tight">
-                NT$ <span class="font-medium ${statsDimension === 'all' ? 'text-emerald-400' : statsDimension === 'boyfriend' ? 'text-blue-400' : 'text-pink-400'}">${totalExpense.toLocaleString()}</span>
-            </p>
-        </div>
-
-        <!-- 類別花費佔比清單 -->
-        <div class="space-y-1">
-            <p class="text-[10px] text-slate-500 tracking-widest uppercase">// 類別消費排行</p>
-            ${categoryListHtml}
+            <p class="text-3xl font-light text-slate-200 mt-4 tracking-tight">NT$ <span class="font-medium ${statsDimension === 'all' ? 'text-emerald-400' : statsDimension === 'boyfriend' ? 'text-blue-400' : 'text-pink-400'}">${totalExpense.toLocaleString()}</span></p>
         </div>
     `;
 }
+
+// 🌟 修正點：重新對齊名稱，避免與 statsDimension 全域變數打架
+window.changeStatsDimension = function(dimension) { statsDimension = dimension; renderStatsPage(); };
+window.changeStatsMonth = function(month) { currentMonthFilter = month; renderStatsPage(); };
 
 window.changeStatsMonth = function(selectedMonth) {
     state.currentMonthFilter = selectedMonth;
