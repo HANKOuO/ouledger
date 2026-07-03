@@ -513,3 +513,6 @@ window.addComment = async function(id) {
     inputEl.value = '';
     await fetchTransactions();
 };
+
+// 確認你的 renderStatsPage 裡面這一段是這樣寫的（使用 changeStatsDimension）
+window.changeStatsDimension = function(dimension) { statsDimension = dimension; renderStatsPage(); };
