@@ -453,11 +453,11 @@ function renderStatsPage() {
             </select>
         </div>
 
-        <!-- 🌟 修正點：將 onclick 改為呼叫變更後的 changeStatsDimension 避免命名衝突 -->
+        <!-- 🎯 請確保你的 app.js 裡面這三顆按鈕是呼叫 changeStatsDimension -->
         <div class="grid grid-cols-3 gap-2 p-1 bg-white/5 rounded-xl text-[11px] font-medium border border-white/5">
-            <button onclick="changeStatsDimension('all')" class="py-2 rounded-lg text-center cursor-pointer transition-all ${statsDimension === 'all' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'text-slate-500'}">共同支出</button>
-            <button onclick="changeStatsDimension('boyfriend')" class="py-2 rounded-lg text-center cursor-pointer transition-all ${statsDimension === 'boyfriend' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'text-slate-500'}">男友個人</button>
-            <button onclick="changeStatsDimension('girlfriend')" class="py-2 rounded-lg text-center cursor-pointer transition-all ${statsDimension === 'girlfriend' ? 'bg-pink-500/10 text-pink-400 border border-pink-500/20' : 'text-slate-500'}">女友個人</button>
+            <button onclick="changeStatsDimension('all')" ...>共同支出</button>
+            <button onclick="changeStatsDimension('boyfriend')" ...>男友個人</button>
+            <button onclick="changeStatsDimension('girlfriend')" ...>女友個人</button>
         </div>
 
         <!-- 數據面板 -->
