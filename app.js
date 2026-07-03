@@ -9,13 +9,15 @@ document.addEventListener("DOMContentLoaded", () => {
         btn.addEventListener('click', () => switchTab(tabs[index], btn));
     });
     
-    // 初始化時先設定一個預設當前月份
+    // 初始化時自動設定為當前月份（格式如：07）
     const now = new Date();
-    state.currentMonthFilter = now.toLocaleDateString('zh-TW', {year: 'numeric', month: '2-digit'}).replace('/', '.');
+    state.currentMonthFilter = now.toLocaleDateString('zh-TW', {month: '2-digit'});
 });
 
-// 全局額外擴充狀態
-state.currentMonthFilter = ''; // 用於統計頁面的月份篩選
+// 全局額外狀態擴充
+if (!state.currentMonthFilter) {
+    state.currentMonthFilter = new Date().toLocaleDateString('zh-TW', {month: '2-digit'});
+}
 
 // ==========================================
 // 2. 全局切頁導覽控制
@@ -138,7 +140,7 @@ function renderBookPage() {
                                 <span class="text-[8px] px-1.5 py-0.2 rounded-md ${item.type === 'shared' ? 'bg-purple-500/10 text-purple-400' : 'bg-blue-500/10 text-blue-400'}">
                                     ${item.type === 'shared' ? '共同' : '個人'}
                                 </span>
-                                ${item.category ? `<span class="text-[8px] px-1.5 py-0.2 rounded-md bg-white/5 text-slate-400">${item.category}</span>` : ''}
+                                ${item.category ? `<span class="text-[8px] px-1.5 py-0.2 rounded-md bg-white/10 text-pink-400/90 font-mono">${item.category}</span>` : ''}
                                 ${isDisapproved ? '<div class="text-[8px] bg-rose-500/10 text-rose-400 px-1.5 py-0.5 rounded font-medium">⚠️ 未認同消費</div>' : ''}
                             </div>
                             <p class="text-[10px] text-slate-500 font-mono tracking-wider">${item.date} // 記錄者：${item.by}</p>
@@ -171,23 +173,15 @@ window.openTransactionModal = function(id = null) {
         if (!tx) return;
         document.getElementById('modal-title').innerText = "// 編輯明細";
         document.getElementById('edit-id').value = tx.id;
-        
-        // 分離類型標籤與自訂項目名稱
-        if (tx.title.startsWith('[')) {
-            const endIdx = tx.title.indexOf(']');
-            document.getElementById('tx-category').value = tx.title.substring(1, endIdx);
-            document.getElementById('tx-title').value = tx.title.substring(endIdx + 2);
-        } else {
-            document.getElementById('tx-title').value = tx.title;
-        }
-        
+        document.getElementById('tx-title').value = tx.title;
+        document.getElementById('tx-category').value = tx.category || "早餐";
         document.getElementById('tx-amount').value = tx.amount;
         document.getElementById('tx-account-type').value = tx.type;
     } else {
         document.getElementById('modal-title').innerText = "// 新增明細";
         document.getElementById('edit-id').value = "";
         document.getElementById('tx-title').value = "";
-        document.getElementById('tx-category').value = "早餐"; // 預設為選單第一個
+        document.getElementById('tx-category').value = "早餐"; 
         document.getElementById('tx-amount').value = "";
         document.getElementById('tx-account-type').value = "personal";
     }
@@ -205,7 +199,6 @@ window.saveTransaction = async function() {
 
     if (!title || isNaN(amount) || amount <= 0) return alert('// 請填寫項目與金額');
 
-    // 自動抓取當下西元年月作為月份統計標準，格式：YYYY.MM (例如：2026.07)
     const now = new Date();
     const formattedDate = now.toLocaleDateString('zh-TW', {month: '2-digit', day: '2-digit'}).replace('/', '.');
 
@@ -224,7 +217,7 @@ window.saveTransaction = async function() {
                 date: formattedDate,
                 by: currentBy,
                 type: type,
-                category: category, // 🔥 寫入新類別欄位
+                category: category, 
                 status: 'approved',
                 comments: []
             }]);
@@ -301,7 +294,6 @@ window.submitIncome = async function() {
 
     if (!title || isNaN(amount) || amount <= 0) return alert('// 請填入項目與金額');
 
-    // 格式化當下西元年月
     const now = new Date();
     const formattedDate = now.toLocaleDateString('zh-TW', {month: '2-digit', day: '2-digit'}).replace('/', '.');
 
@@ -372,7 +364,7 @@ window.submitPoolTransaction = async function() {
 };
 
 // ==========================================
-// 7. 財務計算核心引擎與統計（升級分月份看花費邏輯）
+// 7. 財務計算核心引擎
 // ==========================================
 function recalculateBalances() {
     let bfIncome = 0, gfIncome = 0, bfSpent = 0, gfSpent = 0, sharedExpenses = 0, sharedDeposits = 0;
@@ -405,7 +397,7 @@ function recalculateBalances() {
 }
 
 // ==========================================
-// 核心：統計頁面渲染（全面修復切換死鎖問題）
+// 8. 核心：統計頁面渲染（完全修復切換死鎖與按鈕）
 // ==========================================
 function renderStatsPage() {
     const mainContent = document.getElementById('main-content');
@@ -413,23 +405,22 @@ function renderStatsPage() {
     
     let totalExpense = 0;
     
-    // 取得所有資料中不重複的月份，用來動態產生月份選單
+    // 取得所有資料中不重複的月份
     const availableMonths = [...new Set(state.transactions
         .filter(tx => tx.date && tx.date.includes('.'))
         .map(tx => tx.date.split('.')[0])
     )].sort((a, b) => b - a); 
 
-    if (!availableMonths.includes(currentMonthFilter) && availableMonths.length > 0) {
-        currentMonthFilter = availableMonths[0];
+    if (!availableMonths.includes(state.currentMonthFilter) && availableMonths.length > 0) {
+        state.currentMonthFilter = availableMonths[0];
     }
 
-    // 計算符合「指定月份」與「指定視角」的開銷
     state.transactions.forEach(tx => {
         const txAmount = parseFloat(tx.amount) || 0;
         if (tx.type === 'income' || tx.title.includes('📥') || tx.status === 'disapproved') return;
 
         const txMonth = tx.date && tx.date.includes('.') ? tx.date.split('.')[0] : '';
-        if (txMonth !== currentMonthFilter) return;
+        if (txMonth !== state.currentMonthFilter) return;
 
         if (statsDimension === 'all' && tx.type === 'shared') totalExpense += txAmount;
         else if (statsDimension === 'boyfriend' && tx.by === '男友' && tx.type === 'personal') totalExpense += txAmount;
@@ -437,7 +428,7 @@ function renderStatsPage() {
     });
 
     let monthOptionsHtml = availableMonths.map(m => 
-        `<option value="${m}" ${currentMonthFilter === m ? 'selected' : ''}>${m} 月份</option>`
+        `<option value="${m}" ${state.currentMonthFilter === m ? 'selected' : ''}>${m} 月份</option>`
     ).join('');
     
     if (availableMonths.length === 0) {
@@ -453,16 +444,16 @@ function renderStatsPage() {
             </select>
         </div>
 
-        <!-- 🎯 請確保你的 app.js 裡面這三顆按鈕是呼叫 changeStatsDimension -->
+        <!-- 三分流切換按鈕 (完全整合變數與樣式樣板) -->
         <div class="grid grid-cols-3 gap-2 p-1 bg-white/5 rounded-xl text-[11px] font-medium border border-white/5">
-            <button onclick="changeStatsDimension('all')" ...>共同支出</button>
-            <button onclick="changeStatsDimension('boyfriend')" ...>男友個人</button>
-            <button onclick="changeStatsDimension('girlfriend')" ...>女友個人</button>
+            <button onclick="changeStatsDimension('all')" class="py-2 rounded-lg text-center cursor-pointer transition-all ${statsDimension === 'all' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'text-slate-500'}">共同支出</button>
+            <button onclick="changeStatsDimension('boyfriend')" class="py-2 rounded-lg text-center cursor-pointer transition-all ${statsDimension === 'boyfriend' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'text-slate-500'}">男友個人</button>
+            <button onclick="changeStatsDimension('girlfriend')" class="py-2 rounded-lg text-center cursor-pointer transition-all ${statsDimension === 'girlfriend' ? 'bg-pink-500/10 text-pink-400 border border-pink-500/20' : 'text-slate-500'}">女友個人</button>
         </div>
 
         <!-- 數據面板 -->
         <div class="glass-panel p-6 rounded-2xl text-center relative overflow-hidden">
-            <p class="text-[10px] font-mono tracking-widest text-slate-500">// ${currentMonthFilter}月份 數據分類統計</p>
+            <p class="text-[10px] font-mono tracking-widest text-slate-500">// ${state.currentMonthFilter}月份 數據分類統計</p>
             <h3 class="text-xs font-light text-slate-300 mt-2">
                 ${statsDimension === 'all' ? '👥 雙人共同公帳總流出' : statsDimension === 'boyfriend' ? '🙋‍♂️ 男友個人生活總花費' : '🙋‍♀️ 女友個人生活總花費'}
             </h3>
@@ -471,9 +462,13 @@ function renderStatsPage() {
     `;
 }
 
-// 🌟 修正點：重新對齊名稱，避免與 statsDimension 全域變數打架
-window.changeStatsDimension = function(dimension) { statsDimension = dimension; renderStatsPage(); };
-window.changeStatsMonth = function(month) { currentMonthFilter = month; renderStatsPage(); };
+// ==========================================
+// 9. 互動與按鈕全域綁定控制
+// ==========================================
+window.changeStatsDimension = function(dimension) { 
+    statsDimension = dimension; 
+    renderStatsPage(); 
+};
 
 window.changeStatsMonth = function(selectedMonth) {
     state.currentMonthFilter = selectedMonth;
@@ -514,5 +509,4 @@ window.addComment = async function(id) {
     await fetchTransactions();
 };
 
-// 確認你的 renderStatsPage 裡面這一段是這樣寫的（使用 changeStatsDimension）
-window.changeStatsDimension = function(dimension) { statsDimension = dimension; renderStatsPage(); };
+window.purgeData = function() { if (confirm('確定要清除所有暫存？')) { state.transactions = []; state.incomeLogs = []; recalculateBalances(); if (state.currentTab === 'book') renderBookPage(); alert('資料已抹除'); } };
