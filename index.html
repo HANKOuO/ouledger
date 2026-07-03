@@ -19,10 +19,11 @@
 </head>
 <body class="bg-[#070a13] min-h-screen text-slate-300 font-sans antialiased overflow-x-hidden">
 
+    <!-- 幾何背景光暈 -->
     <div class="fixed top-[-10%] left-[-20%] w-[80vw] h-[80vw] bg-blue-500/10 rounded-full blur-[120px] pointer-events-none"></div>
     <div class="fixed bottom-[-10%] right-[-20%] w-[70vw] h-[70vw] bg-pink-500/10 rounded-full blur-[120px] pointer-events-none"></div>
 
-    <!-- 驗證登入遮罩 -->
+    <!-- 驗證登入遮罩視窗 -->
     <div id="login-overlay" class="fixed inset-0 bg-[#070a13] z-[100] flex items-center justify-center p-6">
         <div class="glass-panel w-full max-w-sm p-8 rounded-3xl space-y-6 border border-white/10 text-center">
             <div>
@@ -39,7 +40,10 @@
         </div>
     </div>
 
+    <!-- 主應用介面容器 -->
     <div class="max-w-md mx-auto min-h-screen flex flex-col relative pb-24">
+        
+        <!-- 頂部身分與餘額導覽列 -->
         <header class="relative p-6 rounded-b-3xl overflow-hidden sticky top-0 z-50 border-b border-white/5 bg-[#070a13]/70 backdrop-blur-md">
             <div class="flex justify-between items-center mb-6">
                 <div>
@@ -51,6 +55,7 @@
                 </div>
             </div>
 
+            <!-- 即時動態財務面板 -->
             <div class="grid grid-cols-3 gap-4 text-left">
                 <div class="border-l border-blue-400/40 pl-3 py-1">
                     <p class="text-[9px] text-slate-500 font-light tracking-wider">男友結餘</p>
@@ -67,7 +72,10 @@
             </div>
         </header>
 
+        <!-- 主體內容容器 -->
         <main class="flex-1 p-6 space-y-6 overflow-y-auto z-10 relative">
+            
+            <!-- 四大主導航分頁 -->
             <div id="tab-container" class="grid grid-cols-4 gap-3 mb-2">
                 <button class="active-tab text-pink-400 p-3 rounded-2xl text-center flex flex-col items-center justify-center transition-all cursor-pointer">
                     <span class="text-sm font-light tracking-wider">帳本</span>
@@ -83,13 +91,16 @@
                 </button>
             </div>
 
+            <!-- 動態資料注入區（由 app.js 渲染） -->
             <div id="main-content" class="space-y-6"></div>
 
+            <!-- 懸浮新增明細按鈕 -->
             <button id="float-add-btn" onclick="openTransactionModal()" class="fixed bottom-24 right-6 w-12 h-12 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-full flex items-center justify-center text-xl shadow-[0_0_20px_rgba(244,63,94,0.4)] cursor-pointer hover:scale-110 active:scale-95 transition-all z-40">
                 ＋
             </button>
         </main>
 
+        <!-- 新增與編輯交易彈跳視窗 -->
         <div id="transaction-modal" class="hidden fixed inset-0 bg-[#070a13]/80 backdrop-blur-md z-50 flex items-center justify-center p-6">
             <div class="glass-panel w-full max-w-sm p-6 rounded-3xl space-y-4 border border-white/10 custom-fade-in">
                 <div class="flex justify-between items-center">
@@ -99,10 +110,13 @@
                 
                 <input type="hidden" id="edit-id">
                 <div class="space-y-3">
+                    <!-- 項目備註輸入框 -->
                     <input type="text" id="tx-title" placeholder="備註說明 (如：麥當勞、加油)" class="w-full bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-pink-500/30">
+                    
+                    <!-- 金額輸入框 -->
                     <input type="number" id="tx-amount" placeholder="金額 (NT$)" class="w-full bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-pink-500/30">
                     
-                    <!-- 種類篩選選單 -->
+                    <!-- ✨ 核心升級：精細化消費類別選單（宵夜獨立，飲料零食分開） -->
                     <select id="tx-category" class="w-full bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-sm text-slate-400 focus:outline-none focus:border-pink-500/30 bg-[#121826]">
                         <option value="早餐">🍔 早餐</option>
                         <option value="午餐">🍱 午餐</option>
@@ -116,8 +130,9 @@
                         <option value="其他">📦 其他雜項</option>
                     </select>
 
+                    <!-- 帳戶歸屬選單 -->
                     <select id="tx-account-type" class="w-full bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-sm text-slate-400 focus:outline-none focus:border-pink-500/30 bg-[#121826]">
-                        <option value="personal">個人專專屬帳本</option>
+                        <option value="personal">個人專屬帳本</option>
                         <option value="shared">雙人共同公帳</option>
                     </select>
                 </div>
@@ -128,6 +143,7 @@
             </div>
         </div>
 
+        <!-- 頁尾底欄 -->
         <footer class="p-6 text-center space-y-3 z-10 mt-auto">
             <div class="h-[1px] bg-gradient-to-r from-transparent via-slate-800 to-transparent w-full mb-2"></div>
             <p class="text-[10px] text-slate-500 font-mono tracking-widest">
@@ -139,9 +155,10 @@
         </footer>
     </div>
 
+    <!-- 雲端核心腳本載入區 -->
     <script src="supabase-config.js"></script>
     <script src="auth.js"></script>
-    <!-- 🚀 強力更新：將版本號正式推進至 ?v=6 破解所有快取緩存 -->
-    <script src="app.js?v=6"></script> 
+    <!-- 🚀 終極對齊：將版本號直接切換至 ?v=8，徹底擊碎任何舊代碼的頑固快取記憶！ -->
+    <script src="app.js?v=8"></script> 
 </body>
 </html>
