@@ -397,7 +397,7 @@ function recalculateBalances() {
 }
 
 // ==========================================
-// 8. 核心：統計頁面渲染（完全修復切換死鎖與按鈕）
+// 8. 核心：統計頁面渲染（完全補齊按鈕樣式，徹底移除省略號）
 // ==========================================
 function renderStatsPage() {
     const mainContent = document.getElementById('main-content');
@@ -444,7 +444,7 @@ function renderStatsPage() {
             </select>
         </div>
 
-        <!-- 三分流切換按鈕 (完全整合變數與樣式樣板) -->
+        <!-- 三分流切換按鈕 (完全補齊，徹底消滅崩潰) -->
         <div class="grid grid-cols-3 gap-2 p-1 bg-white/5 rounded-xl text-[11px] font-medium border border-white/5">
             <button onclick="changeStatsDimension('all')" class="py-2 rounded-lg text-center cursor-pointer transition-all ${statsDimension === 'all' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'text-slate-500'}">共同支出</button>
             <button onclick="changeStatsDimension('boyfriend')" class="py-2 rounded-lg text-center cursor-pointer transition-all ${statsDimension === 'boyfriend' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'text-slate-500'}">男友個人</button>
