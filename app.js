@@ -200,7 +200,9 @@ window.saveTransaction = async function() {
     if (!title || isNaN(amount) || amount <= 0) return alert('// 請填寫項目與金額');
 
     const now = new Date();
-    const formattedDate = now.toLocaleDateString('zh-TW', {month: '2-digit', day: '2-digit'}).replace('/', '.');
+    const formattedDate = now.getFullYear() + '.' + 
+                          String(now.getMonth() + 1).padStart(2, '0') + '.' + 
+                          String(now.getDate()).padStart(2, '0');
 
     if (id) {
         const { error } = await supabaseClient
@@ -214,7 +216,7 @@ window.saveTransaction = async function() {
             .insert([{
                 title: title,
                 amount: amount,
-                date: formattedDate,
+                date: formattedDate, // 🔥 寫入 2026.07.06
                 by: currentBy,
                 type: type,
                 category: category, 
@@ -397,7 +399,7 @@ function recalculateBalances() {
 }
 
 // ==========================================
-// 8. 核心：統計頁面渲染（完全補齊按鈕樣式，徹底移除省略號）
+// 8. 核心：統計頁面渲染（跨年自動生成 YYYY.MM 選單）
 // ==========================================
 function renderStatsPage() {
     const mainContent = document.getElementById('main-content');
@@ -405,11 +407,21 @@ function renderStatsPage() {
     
     let totalExpense = 0;
     
-    // 取得所有資料中不重複的月份
+    // ⭕ 升級：精準提取 YYYY.MM 格式 (例如把 "2026.07.06" 切出 "2026.07")
     const availableMonths = [...new Set(state.transactions
         .filter(tx => tx.date && tx.date.includes('.'))
-        .map(tx => tx.date.split('.')[0])
-    )].sort((a, b) => b - a); 
+        .map(tx => {
+            const parts = tx.date.split('.');
+            // 如果原本舊資料是 "07.06" 就補上 2026，如果是新資料 "2026.07.06" 就取前兩段
+            return parts[0].length === 4 ? `${parts[0]}.${parts[1]}` : `2026.${parts[0]}`;
+        })
+    )].sort((a, b) => b.localeCompare(a)); // 降序排列，最新年份月份在最上面
+
+    // 確保預設篩選值符合 YYYY.MM 格式
+    if (!state.currentMonthFilter || !state.currentMonthFilter.includes('.')) {
+        const now = new Date();
+        state.currentMonthFilter = now.getFullYear() + '.' + String(now.getMonth() + 1).padStart(2, '0');
+    }
 
     if (!availableMonths.includes(state.currentMonthFilter) && availableMonths.length > 0) {
         state.currentMonthFilter = availableMonths[0];
@@ -419,8 +431,11 @@ function renderStatsPage() {
         const txAmount = parseFloat(tx.amount) || 0;
         if (tx.type === 'income' || tx.title.includes('📥') || tx.status === 'disapproved') return;
 
-        const txMonth = tx.date && tx.date.includes('.') ? tx.date.split('.')[0] : '';
-        if (txMonth !== state.currentMonthFilter) return;
+        // 轉換當前帳目的年月份進行比對
+        const parts = tx.date ? tx.date.split('.') : [];
+        const txYearMonth = parts[0] && parts[0].length === 4 ? `${parts[0]}.${parts[1]}` : `2026.${parts[0]}`;
+        
+        if (txYearMonth !== state.currentMonthFilter) return;
 
         if (statsDimension === 'all' && tx.type === 'shared') totalExpense += txAmount;
         else if (statsDimension === 'boyfriend' && tx.by === '男友' && tx.type === 'personal') totalExpense += txAmount;
@@ -428,11 +443,11 @@ function renderStatsPage() {
     });
 
     let monthOptionsHtml = availableMonths.map(m => 
-        `<option value="${m}" ${state.currentMonthFilter === m ? 'selected' : ''}>${m} 月份</option>`
+        `<option value="${m}" ${state.currentMonthFilter === m ? 'selected' : ''}>${m.replace('.', '年 ')}月份</option>`
     ).join('');
     
     if (availableMonths.length === 0) {
-        monthOptionsHtml = `<option value="">尚無月份數據</option>`;
+        monthOptionsHtml = `<option value="">尚無數據</option>`;
     }
 
     mainContent.innerHTML = `
@@ -444,7 +459,7 @@ function renderStatsPage() {
             </select>
         </div>
 
-        <!-- 三分流切換按鈕 (完全補齊，徹底消滅崩潰) -->
+        <!-- 三分流切換按鈕 -->
         <div class="grid grid-cols-3 gap-2 p-1 bg-white/5 rounded-xl text-[11px] font-medium border border-white/5">
             <button onclick="changeStatsDimension('all')" class="py-2 rounded-lg text-center cursor-pointer transition-all ${statsDimension === 'all' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'text-slate-500'}">共同支出</button>
             <button onclick="changeStatsDimension('boyfriend')" class="py-2 rounded-lg text-center cursor-pointer transition-all ${statsDimension === 'boyfriend' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'text-slate-500'}">男友個人</button>
@@ -453,7 +468,7 @@ function renderStatsPage() {
 
         <!-- 數據面板 -->
         <div class="glass-panel p-6 rounded-2xl text-center relative overflow-hidden">
-            <p class="text-[10px] font-mono tracking-widest text-slate-500">// ${state.currentMonthFilter}月份 數據分類統計</p>
+            <p class="text-[10px] font-mono tracking-widest text-slate-500">// ${state.currentMonthFilter.replace('.', '年 ')}月份 數據分類統計</p>
             <h3 class="text-xs font-light text-slate-300 mt-2">
                 ${statsDimension === 'all' ? '👥 雙人共同公帳總流出' : statsDimension === 'boyfriend' ? '🙋‍♂️ 男友個人生活總花費' : '🙋‍♀️ 女友個人生活總花費'}
             </h3>
