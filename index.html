@@ -1,8 +1,12 @@
+<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>我們的存摺 - 抽象幾何誌</title>
+    <!-- 🚀 成功加入：網頁小圖標 (Favicon) -->
+    <link rel="icon" href="favicon.png" type="image/png">
+    
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -116,7 +120,7 @@
                     <!-- 金額輸入框 -->
                     <input type="number" id="tx-amount" placeholder="金額 (NT$)" class="w-full bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-pink-500/30">
                     
-                    <!-- ✨ 核心升級：精細化消費類別選單（宵夜獨立，飲料零食分開） -->
+                    <!-- 精細化消費類別選單 -->
                     <select id="tx-category" class="w-full bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-sm text-slate-400 focus:outline-none focus:border-pink-500/30 bg-[#121826]">
                         <option value="早餐">🍔 早餐</option>
                         <option value="午餐">🍱 午餐</option>
@@ -158,6 +162,7 @@
     <!-- 雲端核心腳本載入區 -->
     <script src="supabase-config.js"></script>
     <script src="auth.js"></script>
-    <script src="app.js?v=99"></script> 
+    <!-- 🚀 版本號升級到 ?v=99，這一次不論部署到全新 Netlify 或是本地 Live Server，都能徹底刷爆舊快取！ -->
+    <script src="app.js?v=99"></script>[cite: 3]
 </body>
 </html>
