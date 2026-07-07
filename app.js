@@ -9,14 +9,13 @@ document.addEventListener("DOMContentLoaded", () => {
         btn.addEventListener('click', () => switchTab(tabs[index], btn));
     });
     
-    // 初始化時自動設定為當前月份（格式如：07）
     const now = new Date();
-    state.currentMonthFilter = now.toLocaleDateString('zh-TW', {month: '2-digit'});
+    state.currentMonthFilter = now.getFullYear() + '.' + String(now.getMonth() + 1).padStart(2, '0');
 });
 
-// 全局額外狀態擴充
 if (!state.currentMonthFilter) {
-    state.currentMonthFilter = new Date().toLocaleDateString('zh-TW', {month: '2-digit'});
+    const now = new Date();
+    state.currentMonthFilter = now.getFullYear() + '.' + String(now.getMonth() + 1).padStart(2, '0');
 }
 
 // ==========================================
@@ -97,7 +96,6 @@ function renderBookPage() {
 
             let amountDisplay = `<span class="text-slate-200 font-mono text-sm tracking-tight">-NT$${txAmount.toLocaleString()}</span>`;
 
-            // 💬 歷史留言渲染區塊
             let commentsListHtml = '';
             if (Array.isArray(item.comments) && item.comments.length > 0) {
                 commentsListHtml = `<div class="mt-1 space-y-1.5 bg-white/5 p-3 rounded-xl border border-white/5 text-[11px]">`;
@@ -117,7 +115,7 @@ function renderBookPage() {
             if (isMyTx) {
                 actionButtonsHtml = `
                     <button onclick="openTransactionModal('${item.id}')" class="text-[9px] text-slate-400 border border-white/5 bg-white/5 px-2.5 py-0.5 rounded-full cursor-pointer hover:bg-white/10">編輯</button>
-                    <button onclick="deleteTransaction('${item.id}')" class="text-[9px] text-rose-400/80 border border-rose-500/10 bg-rose-500/5 px-2.5 py-0.5 rounded-full cursor-pointer hover:bg-rose-500/10">刪除</button>
+                    <button onclick="deleteTransaction('${item.id}')" class="text-[9px] text-rose-400/80 border border-rose-500/10 bg-rose-500/5 px-2.5 py-0.5 rounded-full cursor-pointer hover:rose-500/10">刪除</button>
                 `;
             } else {
                 actionButtonsHtml = `
@@ -131,16 +129,20 @@ function renderBookPage() {
                 `;
             }
 
+            // 顯示類別圖示
+            const categoryIcons = { "早餐": "🍔", "午餐": "🍱", "晚餐": "🍜", "宵夜": "🌙", "飲料": "🧋", "零食": "🍪", "交通": "🚗", "購物": "🛍️", "娛樂": "🎬", "其他": "📦" };
+            const currentIcon = categoryIcons[item.category] || "📝";
+
             htmlContent += `
                 <div class="glass-panel p-4 rounded-2xl space-y-3 relative transition-all duration-300 ${isDisapproved ? 'border-l-2 border-rose-500/60 bg-rose-950/5' : ''}">
                     <div class="flex justify-between items-start">
                         <div class="space-y-1">
                             <div class="flex items-center gap-2">
+                                <span class="text-xs">${currentIcon}</span>
                                 <span class="text-sm font-light text-slate-200 tracking-wide">${item.title}</span>
                                 <span class="text-[8px] px-1.5 py-0.2 rounded-md ${item.type === 'shared' ? 'bg-purple-500/10 text-purple-400' : 'bg-blue-500/10 text-blue-400'}">
                                     ${item.type === 'shared' ? '共同' : '個人'}
                                 </span>
-                                ${item.category ? `<span class="text-[8px] px-1.5 py-0.2 rounded-md bg-white/10 text-pink-400/90 font-mono">${item.category}</span>` : ''}
                                 ${isDisapproved ? '<div class="text-[8px] bg-rose-500/10 text-rose-400 px-1.5 py-0.5 rounded font-medium">⚠️ 未認同消費</div>' : ''}
                             </div>
                             <p class="text-[10px] text-slate-500 font-mono tracking-wider">${item.date} // 記錄者：${item.by}</p>
@@ -166,6 +168,7 @@ function renderBookPage() {
 
 window.setBookFilter = function(type) { state.filterType = type; renderBookPage(); };
 
+// 🚀 升級調整：支援選擇日期初始化
 window.openTransactionModal = function(id = null) {
     document.getElementById('transaction-modal').classList.remove('hidden');
     if (id) {
@@ -177,6 +180,12 @@ window.openTransactionModal = function(id = null) {
         document.getElementById('tx-category').value = tx.category || "早餐";
         document.getElementById('tx-amount').value = tx.amount;
         document.getElementById('tx-account-type').value = tx.type;
+        
+        // 歷史日期轉成標準網頁格式 YYYY-MM-DD
+        if(tx.date && tx.date.split('.').length === 3) {
+            const dParts = tx.date.split('.');
+            document.getElementById('tx-date').value = `${dParts[0]}-${dParts[1]}-${dParts[2]}`;
+        }
     } else {
         document.getElementById('modal-title').innerText = "// 新增明細";
         document.getElementById('edit-id').value = "";
@@ -184,6 +193,13 @@ window.openTransactionModal = function(id = null) {
         document.getElementById('tx-category').value = "早餐"; 
         document.getElementById('tx-amount').value = "";
         document.getElementById('tx-account-type').value = "personal";
+        
+        // 預設代入今天日期
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        document.getElementById('tx-date').value = `${yyyy}-${mm}-${dd}`;
     }
 };
 
@@ -191,44 +207,35 @@ window.closeTransactionModal = function() { document.getElementById('transaction
 
 window.saveTransaction = async function() {
     const id = document.getElementById('edit-id').value;
-    let title = document.getElementById('tx-title').value.trim(); // 拿掉 const 改成 let
+    let title = document.getElementById('tx-title').value.trim();
     const amount = parseFloat(document.getElementById('tx-amount').value);
     const type = document.getElementById('tx-account-type').value;
     const category = document.getElementById('tx-category').value;
+    const inputDate = document.getElementById('tx-date').value; // 抓取選定日期
     const currentBy = state.userRole === 'boyfriend' ? '男友' : '女友';
 
-    // 🚀 核心改動 1：金額為空或小於等於 0 依然要阻擋
-    if (isNaN(amount) || amount <= 0) return alert('// 請填寫有效的金額');
+    if (isNaN(amount) || amount <= 0) return alert('// 請填寫項目與金額');
+    if (!title) title = category;
 
-    // 🚀 核心改動 2：如果備註說明沒填，自動把類別填進去（例如變成了項目叫「早餐」）
-    if (!title) {
-        title = category;
+    // 將網頁日期 "2026-07-06" 轉化成資料庫格式 "2026.07.06"
+    let formattedDate = inputDate ? inputDate.replace(/-/g, '.') : '';
+    if(!formattedDate) {
+        const now = new Date();
+        formattedDate = now.getFullYear() + '.' + String(now.getMonth() + 1).padStart(2, '0') + '.' + String(now.getDate()).padStart(2, '0');
     }
-
-    // 生成跨年格式如：2026.07.06
-    const now = new Date();
-    const formattedDate = now.getFullYear() + '.' + 
-        now.toLocaleDateString('zh-TW', {month: '2-digit'}) + '.' + 
-        now.toLocaleDateString('zh-TW', {day: '2-digit'});
 
     if (id) {
         const { error } = await supabaseClient
             .from('transactions')
-            .update({ title: title, amount: amount, type: type, category: category })
+            .update({ title: title, amount: amount, type: type, category: category, date: formattedDate })
             .eq('id', id);
         if (error) return alert('修改失敗: ' + error.message);
     } else {
         const { error } = await supabaseClient
             .from('transactions')
             .insert([{
-                title: title,
-                amount: amount,
-                date: formattedDate,
-                by: currentBy,
-                type: type,
-                category: category, 
-                status: 'approved',
-                comments: []
+                title: title, amount: amount, date: formattedDate, by: currentBy,
+                type: type, category: category, status: 'approved', comments: []
             }]);
         if (error) return alert('寫入雲端失敗: ' + error.message);
     }
@@ -239,22 +246,18 @@ window.saveTransaction = async function() {
 
 window.deleteTransaction = async function(id) {
     if (confirm('確定要刪除明細嗎？')) {
-        const { error } = await supabaseClient
-            .from('transactions')
-            .delete()
-            .eq('id', id);
+        const { error } = await supabaseClient .from('transactions') .delete() .eq('id', id);
         if (error) return alert('刪除失敗: ' + error.message);
         await fetchTransactions();
     }
 };
 
 // ==========================================
-// 5. 收入頁面渲染
+// 5. 收入頁面與提撥
 // ==========================================
 function renderIncomeSavePage() {
     const mainContent = document.getElementById('main-content');
     if (!mainContent) return;
-    
     const currentBy = state.userRole === 'boyfriend' ? '男友' : '女友';
     let logsHtml = '';
     state.incomeLogs.forEach(log => {
@@ -300,29 +303,17 @@ window.submitIncome = async function() {
     const title = document.getElementById('income-title').value.trim();
     const amount = parseFloat(document.getElementById('income-amount').value);
     const currentBy = state.userRole === 'boyfriend' ? '男友' : '女友';
-
     if (!title || isNaN(amount) || amount <= 0) return alert('// 請填入項目與金額');
 
     const now = new Date();
-    const formattedDate = now.toLocaleDateString('zh-TW', {month: '2-digit', day: '2-digit'}).replace('/', '.');
+    const formattedDate = now.getFullYear() + '.' + String(now.getMonth() + 1).padStart(2, '0') + '.' + String(now.getDate()).padStart(2, '0');
 
-    const { error } = await supabaseClient
-        .from('transactions')
-        .insert([{
-            title: `💰 收入：${title}`, amount: amount,
-            date: formattedDate,
-            by: currentBy, type: 'income', status: 'approved', comments: []
-        }]);
-
+    const { error } = await supabaseClient .from('transactions').insert([{ title: `💰 收入：${title}`, amount: amount, date: formattedDate, by: currentBy, type: 'income', status: 'approved', comments: [] }]);
     if (error) return alert('登記收入失敗: ' + error.message);
-
     await fetchTransactions();
     if (state.currentTab === 'save') renderIncomeSavePage();
 };
 
-// ==========================================
-// 6. 共同公帳池提撥模組
-// ==========================================
 function renderSharedPoolPage() {
     const mainContent = document.getElementById('main-content');
     mainContent.innerHTML = `
@@ -357,23 +348,16 @@ window.submitPoolTransaction = async function() {
     if (state.personalIncomes[state.userRole] < amount) return alert('// 錯誤：你的個人現有收入不足！');
 
     const now = new Date();
-    const formattedDate = now.toLocaleDateString('zh-TW', {month: '2-digit', day: '2-digit'}).replace('/', '.');
+    const formattedDate = now.getFullYear() + '.' + String(now.getMonth() + 1).padStart(2, '0') + '.' + String(now.getDate()).padStart(2, '0');
 
-    const { error } = await supabaseClient
-        .from('transactions')
-        .insert([{
-            amount: amount, title: `📥 提撥：${note}`,
-            date: formattedDate,
-            by: state.userRole === 'boyfriend' ? '男友' : '女友', type: 'shared', status: 'approved', comments: []
-        }]);
-
+    const { error } = await supabaseClient .from('transactions').insert([{ amount: amount, title: `📥 提撥：${note}`, date: formattedDate, by: state.userRole === 'boyfriend' ? '男友' : '女友', type: 'shared', status: 'approved', comments: [] }]);
     if (error) return alert('提撥失敗: ' + error.message);
     await fetchTransactions();
     renderSharedPoolPage();
 };
 
 // ==========================================
-// 7. 財務計算核心引擎
+// 7. 財務計算與統計
 // ==========================================
 function recalculateBalances() {
     let bfIncome = 0, gfIncome = 0, bfSpent = 0, gfSpent = 0, sharedExpenses = 0, sharedDeposits = 0;
@@ -394,10 +378,8 @@ function recalculateBalances() {
         }
     });
 
-    state.personalIncomes.boyfriend = bfIncome;
-    state.personalIncomes.girlfriend = gfIncome;
-    state.balances.boyfriend = bfIncome - bfSpent;
-    state.balances.girlfriend = gfIncome - gfSpent;
+    state.personalIncomes.boyfriend = bfIncome; state.personalIncomes.girlfriend = gfIncome;
+    state.balances.boyfriend = bfIncome - bfSpent; state.balances.girlfriend = gfIncome - gfSpent;
     state.balances.shared = sharedDeposits - sharedExpenses;
 
     document.getElementById('bfd-balance').innerText = `NT$${state.balances.boyfriend.toLocaleString()}`;
@@ -406,29 +388,22 @@ function recalculateBalances() {
 }
 
 // ==========================================
-// 8. 核心：統計頁面渲染（跨年自動生成 YYYY.MM 選單）
+// 🚀 升級：統計頁面渲染（整合自動比重分析功能）
 // ==========================================
 function renderStatsPage() {
     const mainContent = document.getElementById('main-content');
     if (!mainContent) return;
     
     let totalExpense = 0;
+    let categoryMap = {}; // 紀錄各分類花費金額
     
-    // ⭕ 升級：精準提取 YYYY.MM 格式 (例如把 "2026.07.06" 切出 "2026.07")
     const availableMonths = [...new Set(state.transactions
-        .filter(tx => tx.date && tx.date.includes('.'))
+        .filter(tx => tx.date && tx.date.split('.').length >= 2)
         .map(tx => {
             const parts = tx.date.split('.');
-            // 如果原本舊資料是 "07.06" 就補上 2026，如果是新資料 "2026.07.06" 就取前兩段
             return parts[0].length === 4 ? `${parts[0]}.${parts[1]}` : `2026.${parts[0]}`;
         })
-    )].sort((a, b) => b.localeCompare(a)); // 降序排列，最新年份月份在最上面
-
-    // 確保預設篩選值符合 YYYY.MM 格式
-    if (!state.currentMonthFilter || !state.currentMonthFilter.includes('.')) {
-        const now = new Date();
-        state.currentMonthFilter = now.getFullYear() + '.' + String(now.getMonth() + 1).padStart(2, '0');
-    }
+    )].sort((a, b) => b.localeCompare(a)); 
 
     if (!availableMonths.includes(state.currentMonthFilter) && availableMonths.length > 0) {
         state.currentMonthFilter = availableMonths[0];
@@ -438,27 +413,64 @@ function renderStatsPage() {
         const txAmount = parseFloat(tx.amount) || 0;
         if (tx.type === 'income' || tx.title.includes('📥') || tx.status === 'disapproved') return;
 
-        // 轉換當前帳目的年月份進行比對
-        const parts = tx.date ? tx.date.split('.') : [];
-        const txYearMonth = parts[0] && parts[0].length === 4 ? `${parts[0]}.${parts[1]}` : `2026.${parts[0]}`;
-        
+        if (!tx.date) return;
+        const parts = tx.date.split('.');
+        const txYearMonth = parts[0].length === 4 ? `${parts[0]}.${parts[1]}` : `2026.${parts[0]}`;
+
         if (txYearMonth !== state.currentMonthFilter) return;
 
-        if (statsDimension === 'all' && tx.type === 'shared') totalExpense += txAmount;
-        else if (statsDimension === 'boyfriend' && tx.by === '男友' && tx.type === 'personal') totalExpense += txAmount;
-        else if (statsDimension === 'girlfriend' && tx.by === '女友' && tx.type === 'personal') totalExpense += txAmount;
+        // 分流檢查
+        let isMatch = false;
+        if (statsDimension === 'all' && tx.type === 'shared') isMatch = true;
+        else if (statsDimension === 'boyfriend' && tx.by === '男友' && tx.type === 'personal') isMatch = true;
+        else if (statsDimension === 'girlfriend' && tx.by === '女友' && tx.type === 'personal') isMatch = true;
+
+        if (isMatch) {
+            totalExpense += txAmount;
+            const cat = tx.category || "其他";
+            categoryMap[cat] = (categoryMap[cat] || 0) + txAmount;
+        }
     });
 
     let monthOptionsHtml = availableMonths.map(m => 
-        `<option value="${m}" ${state.currentMonthFilter === m ? 'selected' : ''}>${m.replace('.', '年 ')}月份</option>`
+        `<option value="${m}" ${state.currentMonthFilter === m ? 'selected' : ''}>${m.replace('.', '年 ')}月</option>`
     ).join('');
     
-    if (availableMonths.length === 0) {
-        monthOptionsHtml = `<option value="">尚無數據</option>`;
+    if (availableMonths.length === 0) monthOptionsHtml = `<option value="">尚無月份數據</option>`;
+
+    // 排行榜大數據處理
+    const categoryIcons = { "早餐": "🍔", "午餐": "🍱", "晚餐": "🍜", "宵夜": "🌙", "飲料": "🧋", "零食": "🍪", "交通": "🚗", "購物": "🛍️", "娛樂": "🎬", "其他": "📦" };
+    const sortedCategories = Object.keys(categoryMap).map(cat => ({
+        name: cat,
+        amount: categoryMap[cat],
+        icon: categoryIcons[cat] || "📝",
+        percentage: totalExpense > 0 ? Math.round((categoryMap[cat] / totalExpense) * 100) : 0
+    })).sort((a, b) => b.amount - a.amount);
+
+    let rankListHtml = '';
+    if(sortedCategories.length === 0) {
+        rankListHtml = `<div class="text-center py-6 text-slate-600 text-xs">// 當月尚無消費明細</div>`;
+    } else {
+        sortedCategories.forEach(c => {
+            rankListHtml += `
+                <div class="space-y-1.5">
+                    <div class="flex justify-between items-center text-xs">
+                        <div class="flex items-center gap-1.5">
+                            <span>${c.icon}</span>
+                            <span class="text-slate-300 font-light">${c.name}</span>
+                            <span class="text-[9px] text-slate-500 font-mono">(${c.percentage}%)</span>
+                        </div>
+                        <span class="font-mono text-slate-400 font-medium">NT$${c.amount.toLocaleString()}</span>
+                    </div>
+                    <div class="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                        <div class="h-full rounded-full bg-gradient-to-r from-pink-500/80 to-purple-500/80 transition-all duration-500" style="width: ${c.percentage}%"></div>
+                    </div>
+                </div>
+            `;
+        });
     }
 
     mainContent.innerHTML = `
-        <!-- 月份選擇篩選器 -->
         <div class="glass-panel p-3 rounded-xl flex justify-between items-center border border-white/5">
             <span class="text-[10px] text-slate-500 font-mono uppercase tracking-widest">// 選擇統計月份</span>
             <select id="stats-month-select" onchange="changeStatsMonth(this.value)" class="bg-white/5 border border-white/5 rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none bg-[#121826]">
@@ -466,37 +478,33 @@ function renderStatsPage() {
             </select>
         </div>
 
-        <!-- 三分流切換按鈕 -->
         <div class="grid grid-cols-3 gap-2 p-1 bg-white/5 rounded-xl text-[11px] font-medium border border-white/5">
             <button onclick="changeStatsDimension('all')" class="py-2 rounded-lg text-center cursor-pointer transition-all ${statsDimension === 'all' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'text-slate-500'}">共同支出</button>
             <button onclick="changeStatsDimension('boyfriend')" class="py-2 rounded-lg text-center cursor-pointer transition-all ${statsDimension === 'boyfriend' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'text-slate-500'}">男友個人</button>
             <button onclick="changeStatsDimension('girlfriend')" class="py-2 rounded-lg text-center cursor-pointer transition-all ${statsDimension === 'girlfriend' ? 'bg-pink-500/10 text-pink-400 border border-pink-500/20' : 'text-slate-500'}">女友個人</button>
         </div>
 
-        <!-- 數據面板 -->
         <div class="glass-panel p-6 rounded-2xl text-center relative overflow-hidden">
-            <p class="text-[10px] font-mono tracking-widest text-slate-500">// ${state.currentMonthFilter.replace('.', '年 ')}月份 數據分類統計</p>
+            <p class="text-[10px] font-mono tracking-widest text-slate-500">// ${state.currentMonthFilter.replace('.', '年 ')}月 數據總覽</p>
             <h3 class="text-xs font-light text-slate-300 mt-2">
                 ${statsDimension === 'all' ? '👥 雙人共同公帳總流出' : statsDimension === 'boyfriend' ? '🙋‍♂️ 男友個人生活總花費' : '🙋‍♀️ 女友個人生活總花費'}
             </h3>
             <p class="text-3xl font-light text-slate-200 mt-4 tracking-tight">NT$ <span class="font-medium ${statsDimension === 'all' ? 'text-emerald-400' : statsDimension === 'boyfriend' ? 'text-blue-400' : 'text-pink-400'}">${totalExpense.toLocaleString()}</span></p>
         </div>
+
+        <div class="glass-panel p-5 rounded-2xl space-y-4">
+            <p class="text-[10px] text-slate-500 font-mono tracking-widest uppercase">// 類別消費排行比例分析</p>
+            <div class="space-y-4">${rankListHtml}</div>
+        </div>
     `;
 }
 
-// ==========================================
-// 9. 互動與按鈕全域綁定控制
-// ==========================================
-window.changeStatsDimension = function(dimension) { 
-    statsDimension = dimension; 
-    renderStatsPage(); 
-};
+window.changeStatsDimension = function(dimension) { statsDimension = dimension; renderStatsPage(); };
+window.changeStatsMonth = function(selectedMonth) { state.currentMonthFilter = selectedMonth; renderStatsPage(); };
 
-window.changeStatsMonth = function(selectedMonth) {
-    state.currentMonthFilter = selectedMonth;
-    renderStatsPage();
-};
-
+// ==========================================
+// 9. 互動與按鈕全域控制
+// ==========================================
 window.toggleQuickReject = async function(id) {
     const tx = state.transactions.find(t => String(t.id) === String(id));
     if (!tx) return;
@@ -508,25 +516,15 @@ window.toggleQuickReject = async function(id) {
 window.addComment = async function(id) {
     const inputEl = document.getElementById(`comment-input-${id}`);
     if (!inputEl || !inputEl.value.trim()) return;
-
     const commentText = inputEl.value.trim();
     const currentAuthor = state.userRole === 'boyfriend' ? '男友' : '女友';
     const tx = state.transactions.find(t => String(t.id) === String(id));
     if (!tx) return;
 
     const currentComments = Array.isArray(tx.comments) ? tx.comments : [];
-    const updatedComments = [
-        ...currentComments,
-        { author: currentAuthor, text: commentText }
-    ];
-
-    const { error } = await supabaseClient
-        .from('transactions')
-        .update({ comments: updatedComments })
-        .eq('id', id);
-
+    const updatedComments = [...currentComments, { author: currentAuthor, text: commentText }];
+    const { error } = await supabaseClient.from('transactions').update({ comments: updatedComments }).eq('id', id);
     if (error) return alert('留言失敗: ' + error.message);
-
     inputEl.value = '';
     await fetchTransactions();
 };
