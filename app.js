@@ -73,38 +73,70 @@ async function fetchTransactions() {
 }
 
 // ==========================================
-// 3. 核心：帳本明細分頁渲染 (🔥 Bug 徹底修正防死鎖版)
+// 3. 核心：帳本與共同明細渲染（Bug 修復：解鎖 🤖 AA 拆帳單顯示）
 // ==========================================
 function renderBookPage() {
     const mainContent = document.getElementById('main-content');
     if (!mainContent) return;
 
-    const filteredList = state.transactions.filter(item => {
-        if (state.filterType === 'all') return true;
-        return item.type === state.filterType;
-    });
+    if (typeof state.personalSubFilter === 'undefined') {
+        state.personalSubFilter = 'all'; 
+    }
 
-    let htmlContent = `
-        <div class="flex gap-2 p-1 bg-white/5 rounded-xl border border-white/5 text-[11px] font-medium card-animate">
-            <button onclick="setBookFilter('all')" class="flex-1 py-1.5 rounded-lg text-center cursor-pointer transition-all ${state.filterType === 'all' ? 'bg-white/10 text-slate-200' : 'text-slate-500'}">全部</button>
-            <button onclick="setBookFilter('personal')" class="flex-1 py-1.5 rounded-lg text-center cursor-pointer transition-all ${state.filterType === 'personal' ? 'bg-white/10 text-slate-200' : 'text-slate-500'}">個人</button>
-            <button onclick="setBookFilter('shared')" class="flex-1 py-1.5 rounded-lg text-center cursor-pointer transition-all ${state.filterType === 'shared' ? 'bg-white/10 text-slate-200' : 'text-slate-500'}">共同</button>
-        </div>
-    `;
+    let filteredList = [];
+    let headerHtml = '';
 
-    const hasVisibleExpenses = filteredList.some(item => item.type !== 'income');
+    if (state.currentTab === 'shared') {
+        // 【共同分頁】邏輯：純粹顯示存入共同帳戶的錢
+        filteredList = state.transactions.filter(item => item.type === 'shared' && item.title.includes('📥'));
+        
+        headerHtml = `
+            <div class="flex justify-between items-center mb-4 card-animate">
+                <span class="text-[10px] text-emerald-400 font-mono tracking-widest uppercase">// 共同存入款項明細</span>
+                <span class="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-md border border-emerald-500/10">純存款</span>
+            </div>
+        `;
+    } else {
+        // ==========================================
+        // 【帳本分頁】核心修正：拿掉 !item.title.includes('🤖 AA')，讓拆帳扣款單正常顯示
+        // ==========================================
+        const allPersonalExpenses = state.transactions.filter(item => item.type === 'personal' && item.type !== 'income');
+        
+        if (state.personalSubFilter === 'boyfriend') {
+            filteredList = allPersonalExpenses.filter(item => item.by === '男友');
+        } else if (state.personalSubFilter === 'girlfriend') {
+            filteredList = allPersonalExpenses.filter(item => item.by === '女友');
+        } else {
+            filteredList = allPersonalExpenses; 
+        }
 
-    if (!hasVisibleExpenses) {
-        htmlContent += `<div class="text-center py-12 text-slate-600 text-xs tracking-wider card-animate">尚無明細數據</div>`;
+        headerHtml = `
+            <div class="flex justify-between items-center mb-4 card-animate">
+                <span class="text-[10px] text-slate-500 font-mono tracking-widest uppercase">// 個人消費明細</span>
+                <select id="personal-dropdown-filter" onchange="changePersonalDropdown(this.value)" class="bg-white/5 border border-white/10 rounded-lg px-2.5 py-1 text-[11px] text-slate-300 focus:outline-none bg-[#121826] cursor-pointer shadow-sm">
+                    <option value="all" ${state.personalSubFilter === 'all' ? 'selected' : ''}>✨ 全部個人</option>
+                    <option value="boyfriend" ${state.personalSubFilter === 'boyfriend' ? 'selected' : ''}>🙋‍♂️ 男友</option>
+                    <option value="girlfriend" ${state.personalSubFilter === 'girlfriend' ? 'selected' : ''}>🙋‍♀️ 女友</option>
+                </select>
+            </div>
+        `;
+    }
+
+    let htmlContent = headerHtml;
+    const hasData = filteredList.length > 0;
+
+    if (!hasData) {
+        htmlContent += `<div class="text-center py-12 text-slate-600 text-xs tracking-wider card-animate">尚無對應明細數據</div>`;
     } else {
         filteredList.forEach(item => {
-            if (item.type === 'income') return; 
-
             const isMyTx = (state.userRole === 'boyfriend' && item.by === '男友') || (state.userRole === 'girlfriend' && item.by === '女友');
             const isDisapproved = item.status === 'disapproved';
             const txAmount = parseFloat(item.amount) || 0;
 
-            let amountDisplay = `<span class="text-slate-200 font-mono text-sm tracking-tight">-NT$${txAmount.toLocaleString()}</span>`;
+            const isDeposit = item.title.includes('📥');
+            let amountDisplay = isDeposit 
+                ? `<span class="text-emerald-400 font-mono text-sm tracking-tight">+NT$${txAmount.toLocaleString()}</span>`
+                : `<span class="text-slate-200 font-mono text-sm tracking-tight">-NT$${txAmount.toLocaleString()}</span>`;
 
             let commentsListHtml = '';
             if (Array.isArray(item.comments) && item.comments.length > 0) {
@@ -121,9 +153,9 @@ function renderBookPage() {
                 commentsListHtml += `</div>`;
             }
 
-            // 🚀 修正點：精準使用 item.title，徹底消滅崩潰錯誤！
+            // 🤖 系統拆帳單本身不能再次發起拆帳
             let aaButtonHtml = '';
-            if (isMyTx && !item.title.includes('🤖 AA')) {
+            if (!isDeposit && isMyTx && !item.title.includes('🤖 AA')) {
                 aaButtonHtml = `
                     <div class="text-right mt-1">
                         <button onclick="splitAATransaction('${item.id}')" class="text-[9px] text-emerald-400 border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-0.5 rounded-full cursor-pointer hover:bg-emerald-500/10 transition-colors">
@@ -152,7 +184,8 @@ function renderBookPage() {
             }
 
             const categoryIcons = { "早餐": "🍔", "午餐": "🍱", "晚餐": "🍜", "宵夜": "🌙", "飲料": "🧋", "零食": "🍪", "交通": "🚗", "購物": "🛍️", "娛樂": "🎬", "水電": "⚡", "電信": "📱", "其他": "📦" };
-            const currentIcon = categoryIcons[item.category] || "📝";
+            // 如果是機器人拆帳單，給它一隻可愛的 🤖 機器人 Icon，免得跟一般午餐混淆
+            const currentIcon = isDeposit ? "📥" : (item.title.includes('🤖 AA') ? "🤖" : (categoryIcons[item.category] || "📝"));
 
             htmlContent += `
                 <div class="glass-panel p-4 rounded-2xl space-y-3 relative card-animate press-effect ${isDisapproved ? 'border-l-2 border-rose-500/60 bg-rose-950/5' : ''}">
@@ -161,8 +194,8 @@ function renderBookPage() {
                             <div class="flex items-center gap-2 flex-wrap">
                                 <span class="text-xs">${currentIcon}</span>
                                 <span class="text-sm font-light text-slate-200 tracking-wide">${item.title}</span>
-                                <span class="text-[8px] px-1.5 py-0.2 rounded-md ${item.type === 'shared' ? 'bg-purple-500/10 text-purple-400' : 'bg-blue-500/10 text-blue-400'}">
-                                    ${item.type === 'shared' ? '共同' : '個人'}
+                                <span class="text-[8px] px-1.5 py-0.2 rounded-md ${item.type === 'shared' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-blue-500/10 text-blue-400'}">
+                                    ${item.type === 'shared' ? '共同存入' : '個人支出'}
                                 </span>
                                 ${isDisapproved ? '<div class="text-[8px] bg-rose-500/10 text-rose-400 px-1.5 py-0.5 rounded font-medium">⚠️ 未認同消費</div>' : ''}
                             </div>
@@ -187,6 +220,13 @@ function renderBookPage() {
     }
     mainContent.innerHTML = htmlContent;
 }
+
+// 🚀 新增：個人右上角下拉式選單變更觸發器
+window.changePersonalDropdown = function(val) {
+    triggerHaptic(12);
+    state.personalSubFilter = val;
+    renderBookPage();
+};
 
 window.setBookFilter = function(type) { state.filterType = type; renderBookPage(); };
 
