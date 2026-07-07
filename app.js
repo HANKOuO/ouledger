@@ -32,8 +32,8 @@ function switchTab(tabName, clickedButton) {
     const tabButtons = document.querySelectorAll('#tab-container button');
     const floatBtn = document.getElementById('float-add-btn');
     
-    tabButtons.forEach(btn => btn.className = "glass-panel text-slate-400 p-2 rounded-xl text-center flex flex-col items-center justify-center transition-all cursor-pointer text-xs");
-    clickedButton.className = "active-tab text-pink-400 p-2 rounded-xl text-center flex flex-col items-center justify-center transition-all cursor-pointer text-xs";
+    tabButtons.forEach(btn => btn.className = "glass-panel text-slate-400 p-2.5 rounded-xl text-center flex flex-col items-center justify-center gap-1 transition-all cursor-pointer text-xs");
+    clickedButton.className = "active-tab text-pink-400 p-2.5 rounded-xl text-center flex flex-col items-center justify-center gap-1 transition-all cursor-pointer text-xs";
 
     if (tabName === 'book') {
         floatBtn.classList.remove('hidden');
@@ -41,7 +41,7 @@ function switchTab(tabName, clickedButton) {
     } else {
         floatBtn.classList.add('hidden');
         if (tabName === 'save') renderIncomeSavePage();
-        else if (tabName === 'shared') renderSharedPoolPage();
+        else if (tabName === 'shared') renderBookPage(); // 🚀 共同分頁同步呼叫智慧渲染引擎
         else if (tabName === 'wishlist') renderWishlistPage();
         else if (tabName === 'stats') renderStatsPage();
     }
@@ -67,13 +67,18 @@ async function fetchTransactions() {
     state.wishlist = allData.filter(d => d.status === 'wish');
 
     recalculateBalances();
-    if (state.currentTab === 'book') renderBookPage();
+    
+    if (typeof updateRoleUI === 'function') {
+        updateRoleUI();
+    }
+
+    if (state.currentTab === 'book' || state.currentTab === 'shared') renderBookPage();
     else if (state.currentTab === 'wishlist') renderWishlistPage();
     else if (state.currentTab === 'stats') renderStatsPage();
 }
 
 // ==========================================
-// 3. 核心：帳本與共同明細渲染（Bug 修復：解鎖 🤖 AA 拆帳單顯示）
+// 3. 核心：帳本與共同明細渲染 (🚀 修正版：回撥共同存錢功能、上功能下明細排版)
 // ==========================================
 function renderBookPage() {
     const mainContent = document.getElementById('main-content');
@@ -87,18 +92,45 @@ function renderBookPage() {
     let headerHtml = '';
 
     if (state.currentTab === 'shared') {
-        // 【共同分頁】邏輯：純粹顯示存入共同帳戶的錢
+        // ==========================================
+        // 【共同分頁】排版：上方存錢功能 ＋ 下方歷史明細
+        // ==========================================
         filteredList = state.transactions.filter(item => item.type === 'shared' && item.title.includes('📥'));
         
+        // 🚀 自動抓取當前時間的 年份 與 月份
+        const todayDate = new Date();
+        const currentYear = todayDate.getFullYear();
+        const currentMonth = String(todayDate.getMonth() + 1).padStart(2, '0');
+        const defaultPoolNote = `提撥：${currentYear}.${currentMonth}`;
+
         headerHtml = `
+            <!-- 📥 上方：公帳存入/提撥公金功能區 -->
+            <div class="glass-panel p-5 rounded-2xl border border-white/5 card-animate space-y-4 mb-6">
+                <div class="flex justify-between items-center">
+                    <span class="text-[11px] text-emerald-400 font-medium tracking-wider">📥 共同帳戶公金提撥</span>
+                    <span class="text-[10px] text-slate-500 font-mono">目前公帳餘額: NT$${state.balances.shared.toLocaleString()}</span>
+                </div>
+                <div class="flex flex-col gap-3">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <input type="number" id="pool-amount" placeholder="輸入提撥金額 (NT$)" class="w-full bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-emerald-500/30">
+                        <!-- 🚀 核心修正：value 直接帶入自動生成的 defaultPoolNote -->
+                        <input type="text" id="pool-note" value="${defaultPoolNote}" placeholder="備註說明..." class="w-full bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-emerald-500/30">
+                    </div>
+                    <button onclick="submitPoolTransaction()" class="w-full py-2.5 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 text-emerald-300 border border-emerald-500/30 text-xs rounded-xl cursor-pointer hover:from-emerald-500/30 transition-all font-mono tracking-widest">
+                        確認從個人收入提撥款項
+                    </button>
+                </div>
+            </div>
+
+            <!-- 下方：明細抬頭 -->
             <div class="flex justify-between items-center mb-4 card-animate">
-                <span class="text-[10px] text-emerald-400 font-mono tracking-widest uppercase">// 共同存入款項明細</span>
+                <span class="text-[10px] text-emerald-400 font-mono tracking-widest uppercase">// 共同存入款項歷史明細</span>
                 <span class="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-md border border-emerald-500/10">純存款</span>
             </div>
         `;
     } else {
         // ==========================================
-        // 【帳本分頁】核心修正：拿掉 !item.title.includes('🤖 AA')，讓拆帳扣款單正常顯示
+        // 【帳本分頁】排版：純個人支出
         // ==========================================
         const allPersonalExpenses = state.transactions.filter(item => item.type === 'personal' && item.type !== 'income');
         
@@ -153,7 +185,6 @@ function renderBookPage() {
                 commentsListHtml += `</div>`;
             }
 
-            // 🤖 系統拆帳單本身不能再次發起拆帳
             let aaButtonHtml = '';
             if (!isDeposit && isMyTx && !item.title.includes('🤖 AA')) {
                 aaButtonHtml = `
@@ -184,7 +215,6 @@ function renderBookPage() {
             }
 
             const categoryIcons = { "早餐": "🍔", "午餐": "🍱", "晚餐": "🍜", "宵夜": "🌙", "飲料": "🧋", "零食": "🍪", "交通": "🚗", "購物": "🛍️", "娛樂": "🎬", "水電": "⚡", "電信": "📱", "其他": "📦" };
-            // 如果是機器人拆帳單，給它一隻可愛的 🤖 機器人 Icon，免得跟一般午餐混淆
             const currentIcon = isDeposit ? "📥" : (item.title.includes('🤖 AA') ? "🤖" : (categoryIcons[item.category] || "📝"));
 
             htmlContent += `
@@ -221,7 +251,6 @@ function renderBookPage() {
     mainContent.innerHTML = htmlContent;
 }
 
-// 🚀 新增：個人右上角下拉式選單變更觸發器
 window.changePersonalDropdown = function(val) {
     triggerHaptic(12);
     state.personalSubFilter = val;
@@ -231,7 +260,7 @@ window.changePersonalDropdown = function(val) {
 window.setBookFilter = function(type) { state.filterType = type; renderBookPage(); };
 
 // ==========================================
-// 4. 核心：許願便簽牆分頁渲染模組 (🚀 精簡雙選項版)
+// 4. 核心：許願便簽牆分頁渲染模組
 // ==========================================
 function renderWishlistPage() {
     const mainContent = document.getElementById('main-content');
@@ -306,7 +335,7 @@ window.convertWishToReal = function(id) {
     document.getElementById('modal-title').innerText = "// 願望實現！轉為明細";
     document.getElementById('edit-id').value = wish.id; 
     document.getElementById('tx-title').value = wish.title;
-    document.getElementById('tx-category').value = wish.category === '想吃甚麼' ? '宵夜' : '娛樂'; // 自動適度對齊支出類別
+    document.getElementById('tx-category').value = wish.category === '想吃甚麼' ? '宵夜' : '娛樂'; 
     document.getElementById('tx-amount').value = "";
     document.getElementById('tx-account-type').value = "shared";
 };
@@ -449,35 +478,38 @@ window.submitIncome = async function() {
     if (state.currentTab === 'save') renderIncomeSavePage();
 };
 
-function renderSharedPoolPage() {
-    const mainContent = document.getElementById('main-content');
-    mainContent.innerHTML = `
-        <div class="glass-panel p-6 rounded-2xl text-center border border-emerald-500/10 card-animate">
-            <p class="text-[11px] text-emerald-400 font-medium tracking-wider">共同帳戶總餘額</p>
-            <p class="text-2xl font-semibold text-emerald-300 tracking-tight mt-2">NT$${state.balances.shared.toLocaleString()}</p>
-        </div>
-        <div class="glass-panel p-5 rounded-2xl space-y-4 card-animate">
-            <input type="number" id="pool-amount" placeholder="輸入提撥金額 (NT$)" class="w-full bg-white/5 border border-white/5 px-4 py-3 rounded-xl text-sm text-slate-200 focus:outline-none">
-            <input type="text" id="pool-note" placeholder="定期存入公金..." class="w-full bg-white/5 border border-white/5 px-4 py-3 rounded-xl text-sm text-slate-200 focus:outline-none">
-            <button onclick="submitPoolTransaction()" class="w-full py-3 rounded-xl bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-xs tracking-widest font-mono">確認從個人收入提撥</button>
-        </div>
-    `;
-}
-
 window.submitPoolTransaction = async function() {
     const amount = parseFloat(document.getElementById('pool-amount').value);
-    const note = document.getElementById('pool-note').value.trim() || '共同基金提撥';
-    if (isNaN(amount) || amount <= 0) return alert('// 請輸入有效金額');
-    if (state.personalIncomes[state.userRole] < amount) return alert('// 錯誤：你的個人現有收入不足！');
+    let note = document.getElementById('pool-note').value.trim();
+    
+    // 防呆：如果使用者手動把備註全部刪光了，自動幫他補上預設當前年月
+    if (!note) {
+        const todayDate = new Date();
+        note = `提撥：${todayDate.getFullYear()}.${String(todayDate.getMonth() + 1).padStart(2, '0')}`;
+    }
+    
+    if (isNaN(amount) || amount <= 0) return alert('// 請輸入有效金額。');
+    if (state.personalIncomes[state.userRole] < amount) return alert('// 錯誤：你的個人現有收入不足以提撥此金額！');
 
     triggerHaptic(35);
     const now = new Date();
     const formattedDate = now.getFullYear() + '.' + String(now.getMonth() + 1).padStart(2, '0') + '.' + String(now.getDate()).padStart(2, '0');
 
-    const { error } = await supabaseClient.from('transactions').insert([{ amount: amount, title: `📥 提撥：${note}`, date: formattedDate, by: state.userRole === 'boyfriend' ? '男友' : '女友', type: 'shared', status: 'approved', comments: [] }]);
+    // 🚀 核心修正：將標題寫入格式精準對齊為 📥 提撥：XXXX.XX
+    const { error } = await supabaseClient.from('transactions').insert([{ 
+        amount: amount, 
+        title: `📥 ${note}`, 
+        date: formattedDate, 
+        by: state.userRole === 'boyfriend' ? '男友' : '女友', 
+        type: 'shared', 
+        status: 'approved', 
+        comments: [] 
+    }]);
+    
     if (error) return alert('提撥失敗: ' + error.message);
+    
+    alert(`// 成功為公帳注入基金！✓\n提撥金額：NT$${amount.toLocaleString()}`);
     await fetchTransactions();
-    renderSharedPoolPage();
 };
 
 // ==========================================
@@ -738,3 +770,94 @@ window.addComment = async function(id) {
 };
 
 window.purgeData = function() { if (confirm('確定抹除？')) { state.transactions = []; recalculateBalances(); renderBookPage(); } };
+
+// ==========================================
+// 14. 核心：自訂背景圖片與 localStorage 記憶引擎
+// ==========================================
+document.addEventListener("DOMContentLoaded", () => {
+    const savedBg = localStorage.getItem('user_custom_bg');
+    if (savedBg) {
+        const bgOverlay = document.getElementById('custom-bg-overlay');
+        if (bgOverlay) {
+            bgOverlay.style.backgroundImage = `url(${savedBg})`;
+        }
+    }
+});
+
+window.handleBgUpload = function(input) {
+    if (input.files && input.files[0]) {
+        const file = input.files[0];
+        if (file.size > 4 * 1024 * 1024) {
+            return alert('// 圖片檔案太大了，請選擇 4MB 以下的圖片。');
+        }
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const base64Image = e.target.result;
+            const bgOverlay = document.getElementById('custom-bg-overlay');
+            if (bgOverlay) {
+                bgOverlay.style.backgroundImage = `url(${base64Image})`;
+                triggerHaptic(30); 
+            }
+            try {
+                localStorage.setItem('user_custom_bg', base64Image);
+                alert('// 背景更換成功！✓\n已為你們的存摺換上專屬背景。');
+            } catch (error) {
+                console.error('儲存背景失敗:', error);
+                alert('圖片解析度過高，請換一張稍小的圖片試試看！');
+            }
+        };
+        reader.readAsDataURL(file);
+    }
+};
+
+// ==========================================
+// 15. 核心：大頭貼即時上傳與角色記憶引擎
+// ==========================================
+window.updateRoleUI = function() {
+    const roleTextEl = document.getElementById('role-text');
+    const avatarEl = document.getElementById('user-avatar');
+
+    if (roleTextEl && avatarEl) {
+        if (state.userRole === 'boyfriend') {
+            roleTextEl.innerText = "男友";
+            const savedBfAvatar = localStorage.getItem('user_avatar_boyfriend');
+            avatarEl.src = savedBfAvatar || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80";
+        } else {
+            roleTextEl.innerText = "女友";
+            const savedGfAvatar = localStorage.getItem('user_avatar_girlfriend');
+            avatarEl.src = savedGfAvatar || "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80";
+        }
+    }
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+    setTimeout(() => { if (typeof updateRoleUI === 'function') updateRoleUI(); }, 200);
+});
+
+window.handleAvatarUpload = function(input) {
+    if (input.files && input.files[0]) {
+        const file = input.files[0];
+        if (file.size > 2 * 1024 * 1024) {
+            return alert('// 大頭貼請選擇 2MB 以下的圖片。');
+        }
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const base64Avatar = e.target.result;
+            const avatarEl = document.getElementById('user-avatar');
+            if (avatarEl) {
+                avatarEl.src = base64Avatar;
+                triggerHaptic(20);
+            }
+            const storageKey = state.userRole === 'boyfriend' ? 'user_avatar_boyfriend' : 'user_avatar_girlfriend';
+            try {
+                localStorage.setItem(storageKey, base64Avatar);
+            } catch (err) {
+                console.error('儲存頭像失敗:', err);
+                alert('圖片解析度過高，請裁剪後重試。');
+            }
+        };
+        reader.readAsDataURL(file);
+    }
+};
