@@ -62,7 +62,7 @@ async function fetchTransactions() {
 }
 
 // ==========================================
-// 4. 核心：帳本明細頁面渲染
+// 4. 核心：帳本明細頁面渲染（全面整合一鍵 AA 拆帳按鈕）
 // ==========================================
 function renderBookPage() {
     const mainContent = document.getElementById('main-content');
@@ -112,10 +112,17 @@ function renderBookPage() {
             }
 
             let actionButtonsHtml = '';
+            // 🚀 核心升級：如果是自己的「個人消費」，加碼提供「➗ AA拆帳」按鈕
+            let aaButtonHtml = '';
+            if (item.type === 'personal' && isMyTx && !tx.title.includes('🤖 AA公帳報銷')) {
+                aaButtonHtml = `<button onclick="splitAATransaction('${item.id}')" class="text-[9px] text-emerald-400 border border-emerald-500/20 bg-emerald-500/5 px-2 py-0.5 rounded-full cursor-pointer hover:bg-emerald-500/10">➗ AA拆帳</button>`;
+            }
+
             if (isMyTx) {
                 actionButtonsHtml = `
+                    ${aaButtonHtml}
                     <button onclick="openTransactionModal('${item.id}')" class="text-[9px] text-slate-400 border border-white/5 bg-white/5 px-2.5 py-0.5 rounded-full cursor-pointer hover:bg-white/10">編輯</button>
-                    <button onclick="deleteTransaction('${item.id}')" class="text-[9px] text-rose-400/80 border border-rose-500/10 bg-rose-500/5 px-2.5 py-0.5 rounded-full cursor-pointer hover:rose-500/10">刪除</button>
+                    <button onclick="deleteTransaction('${item.id}')" class="text-[9px] text-rose-400/80 border border-rose-500/10 bg-rose-500/5 px-2.5 py-0.5 rounded-full cursor-pointer hover:bg-rose-500/10">刪除</button>
                 `;
             } else {
                 actionButtonsHtml = `
@@ -129,7 +136,6 @@ function renderBookPage() {
                 `;
             }
 
-            // 顯示類別圖示
             const categoryIcons = { "早餐": "🍔", "午餐": "🍱", "晚餐": "🍜", "宵夜": "🌙", "飲料": "🧋", "零食": "🍪", "交通": "🚗", "購物": "🛍️", "娛樂": "🎬", "其他": "📦" };
             const currentIcon = categoryIcons[item.category] || "📝";
 
@@ -168,7 +174,40 @@ function renderBookPage() {
 
 window.setBookFilter = function(type) { state.filterType = type; renderBookPage(); };
 
-// 🚀 升級調整：支援選擇日期初始化
+// 🚀 核心功能：一鍵 AA 拆帳自動報銷處理函數
+window.splitAATransaction = async function(id) {
+    const tx = state.transactions.find(t => String(t.id) === String(id));
+    if (!tx) return;
+    
+    const halfAmount = Math.round((parseFloat(tx.amount) || 0) / 2);
+    if (halfAmount <= 0) return alert('金額過低，無法進行拆帳。');
+
+    if (!confirm(`// 🚀 啟動 AA 拆帳計算機\n此項目原金額為 NT$${tx.amount}\n系統將自動從【共同帳戶】轉出平分金額 NT$${halfAmount} 還給您，確定要執行嗎？`)) {
+        return;
+    }
+
+    // 1. 在背景自動產生一筆從「共同公帳」流出的平分扣款，用來還給墊款人
+    const { error } = await supabaseClient
+        .from('transactions')
+        .insert([{
+            title: `🤖 AA公帳報銷：平分【${tx.title}】`,
+            amount: halfAmount,
+            date: tx.date, // 沿用原始消費日期，確保統計月份精準不亂套
+            by: tx.by, // 記錄是誰代墊、誰收回這筆錢
+            type: 'shared', // 類型歸屬為「共同公帳流出」
+            category: tx.category || '其他',
+            status: 'approved',
+            comments: [{ author: '系統通知', text: `已成功平分此筆個人代墊消費，由共同帳戶扣除 NT$${halfAmount} 還給${tx.by}。` }]
+        }]);
+
+    if (error) {
+        return alert('拆帳失敗，請檢查網路連線：' + error.message);
+    }
+
+    alert(`// 拆帳數據寫入成功！✓\n已從共同帳戶提撥 NT$${halfAmount} 還給您的個人收入結餘。`);
+    await fetchTransactions();
+};
+
 window.openTransactionModal = function(id = null) {
     document.getElementById('transaction-modal').classList.remove('hidden');
     if (id) {
@@ -181,7 +220,6 @@ window.openTransactionModal = function(id = null) {
         document.getElementById('tx-amount').value = tx.amount;
         document.getElementById('tx-account-type').value = tx.type;
         
-        // 歷史日期轉成標準網頁格式 YYYY-MM-DD
         if(tx.date && tx.date.split('.').length === 3) {
             const dParts = tx.date.split('.');
             document.getElementById('tx-date').value = `${dParts[0]}-${dParts[1]}-${dParts[2]}`;
@@ -194,12 +232,8 @@ window.openTransactionModal = function(id = null) {
         document.getElementById('tx-amount').value = "";
         document.getElementById('tx-account-type').value = "personal";
         
-        // 預設代入今天日期
         const today = new Date();
-        const yyyy = today.getFullYear();
-        const mm = String(today.getMonth() + 1).padStart(2, '0');
-        const dd = String(today.getDate()).padStart(2, '0');
-        document.getElementById('tx-date').value = `${yyyy}-${mm}-${dd}`;
+        document.getElementById('tx-date').value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     }
 };
 
@@ -211,13 +245,12 @@ window.saveTransaction = async function() {
     const amount = parseFloat(document.getElementById('tx-amount').value);
     const type = document.getElementById('tx-account-type').value;
     const category = document.getElementById('tx-category').value;
-    const inputDate = document.getElementById('tx-date').value; // 抓取選定日期
+    const inputDate = document.getElementById('tx-date').value;
     const currentBy = state.userRole === 'boyfriend' ? '男友' : '女友';
 
     if (isNaN(amount) || amount <= 0) return alert('// 請填寫項目與金額');
     if (!title) title = category;
 
-    // 將網頁日期 "2026-07-06" 轉化成資料庫格式 "2026.07.06"
     let formattedDate = inputDate ? inputDate.replace(/-/g, '.') : '';
     if(!formattedDate) {
         const now = new Date();
@@ -246,7 +279,7 @@ window.saveTransaction = async function() {
 
 window.deleteTransaction = async function(id) {
     if (confirm('確定要刪除明細嗎？')) {
-        const { error } = await supabaseClient .from('transactions') .delete() .eq('id', id);
+        const { error } = await supabaseClient.from('transactions').delete().eq('id', id);
         if (error) return alert('刪除失敗: ' + error.message);
         await fetchTransactions();
     }
@@ -308,7 +341,7 @@ window.submitIncome = async function() {
     const now = new Date();
     const formattedDate = now.getFullYear() + '.' + String(now.getMonth() + 1).padStart(2, '0') + '.' + String(now.getDate()).padStart(2, '0');
 
-    const { error } = await supabaseClient .from('transactions').insert([{ title: `💰 收入：${title}`, amount: amount, date: formattedDate, by: currentBy, type: 'income', status: 'approved', comments: [] }]);
+    const { error } = await supabaseClient.from('transactions').insert([{ title: `💰 收入：${title}`, amount: amount, date: formattedDate, by: currentBy, type: 'income', status: 'approved', comments: [] }]);
     if (error) return alert('登記收入失敗: ' + error.message);
     await fetchTransactions();
     if (state.currentTab === 'save') renderIncomeSavePage();
@@ -348,9 +381,9 @@ window.submitPoolTransaction = async function() {
     if (state.personalIncomes[state.userRole] < amount) return alert('// 錯誤：你的個人現有收入不足！');
 
     const now = new Date();
-    const formattedDate = now.getFullYear() + '.' + String(now.getMonth() + 1).padStart(2, '0') + '.' + String(now.getDate()).padStart(2, '0');
+    const formattedDate = now.toLocaleDateString('zh-TW', {year: 'numeric', month: '2-digit', day: '2-digit'}).replace(/\//g, '.');
 
-    const { error } = await supabaseClient .from('transactions').insert([{ amount: amount, title: `📥 提撥：${note}`, date: formattedDate, by: state.userRole === 'boyfriend' ? '男友' : '女友', type: 'shared', status: 'approved', comments: [] }]);
+    const { error } = await supabaseClient.from('transactions').insert([{ amount: amount, title: `📥 提撥：${note}`, date: formattedDate, by: state.userRole === 'boyfriend' ? '男友' : '女友', type: 'shared', status: 'approved', comments: [] }]);
     if (error) return alert('提撥失敗: ' + error.message);
     await fetchTransactions();
     renderSharedPoolPage();
@@ -387,15 +420,12 @@ function recalculateBalances() {
     document.getElementById('shared-balance').innerText = `NT$${state.balances.shared.toLocaleString()}`;
 }
 
-// ==========================================
-// 🚀 升級：統計頁面渲染（整合自動比重分析功能）
-// ==========================================
 function renderStatsPage() {
     const mainContent = document.getElementById('main-content');
     if (!mainContent) return;
     
     let totalExpense = 0;
-    let categoryMap = {}; // 紀錄各分類花費金額
+    let categoryMap = {};
     
     const availableMonths = [...new Set(state.transactions
         .filter(tx => tx.date && tx.date.split('.').length >= 2)
@@ -419,7 +449,6 @@ function renderStatsPage() {
 
         if (txYearMonth !== state.currentMonthFilter) return;
 
-        // 分流檢查
         let isMatch = false;
         if (statsDimension === 'all' && tx.type === 'shared') isMatch = true;
         else if (statsDimension === 'boyfriend' && tx.by === '男友' && tx.type === 'personal') isMatch = true;
@@ -438,7 +467,6 @@ function renderStatsPage() {
     
     if (availableMonths.length === 0) monthOptionsHtml = `<option value="">尚無月份數據</option>`;
 
-    // 排行榜大數據處理
     const categoryIcons = { "早餐": "🍔", "午餐": "🍱", "晚餐": "🍜", "宵夜": "🌙", "飲料": "🧋", "零食": "🍪", "交通": "🚗", "購物": "🛍️", "娛樂": "🎬", "其他": "📦" };
     const sortedCategories = Object.keys(categoryMap).map(cat => ({
         name: cat,
