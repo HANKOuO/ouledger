@@ -114,13 +114,6 @@
                 
                 <input type="hidden" id="edit-id">
                 <div class="space-y-3">
-                    <!-- 項目備註輸入框 -->
-                    <input type="text" id="tx-title" placeholder="備註說明 (如：麥當勞、加油)" class="w-full bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-pink-500/30">
-                    
-                    <!-- 金額輸入框 -->
-                    <input type="number" id="tx-amount" placeholder="金額 (NT$)" class="w-full bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-pink-500/30">
-                    
-                    <!-- 精細化消費類別選單 -->
                     <select id="tx-category" class="w-full bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-sm text-slate-400 focus:outline-none focus:border-pink-500/30 bg-[#121826]">
                         <option value="早餐">🍔 早餐</option>
                         <option value="午餐">🍱 午餐</option>
@@ -134,7 +127,10 @@
                         <option value="其他">📦 其他雜項</option>
                     </select>
 
-                    <!-- 帳戶歸屬選單 -->
+                    <input type="number" id="tx-amount" placeholder="金額 (NT$)" class="w-full bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-pink-500/30">
+                    
+                    <input type="text" id="tx-title" placeholder="備註說明 (選填，如：麥當勞、加油)" class="w-full bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-pink-500/30">
+
                     <select id="tx-account-type" class="w-full bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-sm text-slate-400 focus:outline-none focus:border-pink-500/30 bg-[#121826]">
                         <option value="personal">個人專屬帳本</option>
                         <option value="shared">雙人共同公帳</option>
@@ -163,6 +159,6 @@
     <script src="supabase-config.js"></script>
     <script src="auth.js"></script>
     <!-- 🚀 版本號升級到 ?v=99，這一次不論部署到全新 Netlify 或是本地 Live Server，都能徹底刷爆舊快取！ -->
-    <script src="app.js?v=99"></script>[cite: 3]
+    <script src="app.js?v=100"></script>
 </body>
 </html>

@@ -191,18 +191,25 @@ window.closeTransactionModal = function() { document.getElementById('transaction
 
 window.saveTransaction = async function() {
     const id = document.getElementById('edit-id').value;
-    const title = document.getElementById('tx-title').value.trim();
+    let title = document.getElementById('tx-title').value.trim(); // 拿掉 const 改成 let
     const amount = parseFloat(document.getElementById('tx-amount').value);
     const type = document.getElementById('tx-account-type').value;
     const category = document.getElementById('tx-category').value;
     const currentBy = state.userRole === 'boyfriend' ? '男友' : '女友';
 
-    if (!title || isNaN(amount) || amount <= 0) return alert('// 請填寫項目與金額');
+    // 🚀 核心改動 1：金額為空或小於等於 0 依然要阻擋
+    if (isNaN(amount) || amount <= 0) return alert('// 請填寫有效的金額');
 
+    // 🚀 核心改動 2：如果備註說明沒填，自動把類別填進去（例如變成了項目叫「早餐」）
+    if (!title) {
+        title = category;
+    }
+
+    // 生成跨年格式如：2026.07.06
     const now = new Date();
     const formattedDate = now.getFullYear() + '.' + 
-                          String(now.getMonth() + 1).padStart(2, '0') + '.' + 
-                          String(now.getDate()).padStart(2, '0');
+        now.toLocaleDateString('zh-TW', {month: '2-digit'}) + '.' + 
+        now.toLocaleDateString('zh-TW', {day: '2-digit'});
 
     if (id) {
         const { error } = await supabaseClient
@@ -216,7 +223,7 @@ window.saveTransaction = async function() {
             .insert([{
                 title: title,
                 amount: amount,
-                date: formattedDate, // 🔥 寫入 2026.07.06
+                date: formattedDate,
                 by: currentBy,
                 type: type,
                 category: category, 
