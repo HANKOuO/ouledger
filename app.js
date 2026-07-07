@@ -41,7 +41,7 @@ function switchTab(tabName, clickedButton) {
     } else {
         floatBtn.classList.add('hidden');
         if (tabName === 'save') renderIncomeSavePage();
-        else if (tabName === 'shared') renderBookPage(); // 🚀 共同分頁同步呼叫智慧渲染引擎
+        else if (tabName === 'shared') renderBookPage();
         else if (tabName === 'wishlist') renderWishlistPage();
         else if (tabName === 'stats') renderStatsPage();
     }
@@ -63,8 +63,13 @@ async function fetchTransactions() {
     }
 
     const allData = data || [];
-    state.transactions = allData.filter(d => d.status !== 'wish');
+    
+    // 🚀 核心優化：將大頭貼的雲端系統隱藏紀錄從全域的明細狀態中排除，不干擾一般記帳與許願牆
+    state.transactions = allData.filter(d => d.status !== 'wish' && !d.title.includes('🤖 SYSTEM_AVATAR_'));
     state.wishlist = allData.filter(d => d.status === 'wish');
+    
+    // 💡 把所有原始資料保留一份供頭像引擎單獨抓取
+    state.rawCloudData = allData;
 
     recalculateBalances();
     
@@ -78,7 +83,7 @@ async function fetchTransactions() {
 }
 
 // ==========================================
-// 3. 核心：帳本與共同明細渲染 (🚀 修正版：回撥共同存錢功能、上功能下明細排版)
+// 3. 核心：帳本與共同明細渲染
 // ==========================================
 function renderBookPage() {
     const mainContent = document.getElementById('main-content');
@@ -92,19 +97,14 @@ function renderBookPage() {
     let headerHtml = '';
 
     if (state.currentTab === 'shared') {
-        // ==========================================
-        // 【共同分頁】排版：上方存錢功能 ＋ 下方歷史明細
-        // ==========================================
         filteredList = state.transactions.filter(item => item.type === 'shared' && item.title.includes('📥'));
         
-        // 🚀 自動抓取當前時間的 年份 與 月份
         const todayDate = new Date();
         const currentYear = todayDate.getFullYear();
         const currentMonth = String(todayDate.getMonth() + 1).padStart(2, '0');
         const defaultPoolNote = `提撥：${currentYear}.${currentMonth}`;
 
         headerHtml = `
-            <!-- 📥 上方：公帳存入/提撥公金功能區 -->
             <div class="glass-panel p-5 rounded-2xl border border-white/5 card-animate space-y-4 mb-6">
                 <div class="flex justify-between items-center">
                     <span class="text-[11px] text-emerald-400 font-medium tracking-wider">📥 共同帳戶公金提撥</span>
@@ -113,7 +113,6 @@ function renderBookPage() {
                 <div class="flex flex-col gap-3">
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <input type="number" id="pool-amount" placeholder="輸入提撥金額 (NT$)" class="w-full bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-emerald-500/30">
-                        <!-- 🚀 核心修正：value 直接帶入自動生成的 defaultPoolNote -->
                         <input type="text" id="pool-note" value="${defaultPoolNote}" placeholder="備註說明..." class="w-full bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-emerald-500/30">
                     </div>
                     <button onclick="submitPoolTransaction()" class="w-full py-2.5 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 text-emerald-300 border border-emerald-500/30 text-xs rounded-xl cursor-pointer hover:from-emerald-500/30 transition-all font-mono tracking-widest">
@@ -121,17 +120,12 @@ function renderBookPage() {
                     </button>
                 </div>
             </div>
-
-            <!-- 下方：明細抬頭 -->
             <div class="flex justify-between items-center mb-4 card-animate">
                 <span class="text-[10px] text-emerald-400 font-mono tracking-widest uppercase">// 共同存入款項歷史明細</span>
                 <span class="text-[9px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-md border border-emerald-500/10">純存款</span>
             </div>
         `;
     } else {
-        // ==========================================
-        // 【帳本分頁】排版：純個人支出
-        // ==========================================
         const allPersonalExpenses = state.transactions.filter(item => item.type === 'personal' && item.type !== 'income');
         
         if (state.personalSubFilter === 'boyfriend') {
@@ -448,7 +442,7 @@ function renderIncomeSavePage() {
             </div>
         </div>
         <div class="glass-panel p-5 rounded-2xl space-y-4 card-animate">
-            <p class="text-[11px] text-pink-400 font-medium tracking-wider">✍️ 登記收入 (${currentBy}視角)</p>
+            <p class="text-[11px] text-pink-400 font-medium tracking-wider">👑 登記收入 (${currentBy}視角)</p>
             <div class="flex flex-col gap-3">
                 <input type="text" id="income-title" placeholder="來源說明 (如:薪水、打工)..." class="w-full bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-xs text-slate-200 focus:outline-none">
                 <input type="number" id="income-amount" placeholder="金額" class="w-full bg-white/5 border border-white/5 px-4 py-2.5 rounded-xl text-xs text-slate-200 focus:outline-none">
@@ -482,7 +476,6 @@ window.submitPoolTransaction = async function() {
     const amount = parseFloat(document.getElementById('pool-amount').value);
     let note = document.getElementById('pool-note').value.trim();
     
-    // 防呆：如果使用者手動把備註全部刪光了，自動幫他補上預設當前年月
     if (!note) {
         const todayDate = new Date();
         note = `提撥：${todayDate.getFullYear()}.${String(todayDate.getMonth() + 1).padStart(2, '0')}`;
@@ -495,7 +488,6 @@ window.submitPoolTransaction = async function() {
     const now = new Date();
     const formattedDate = now.getFullYear() + '.' + String(now.getMonth() + 1).padStart(2, '0') + '.' + String(now.getDate()).padStart(2, '0');
 
-    // 🚀 核心修正：將標題寫入格式精準對齊為 📥 提撥：XXXX.XX
     const { error } = await supabaseClient.from('transactions').insert([{ 
         amount: amount, 
         title: `📥 ${note}`, 
@@ -812,21 +804,40 @@ window.handleBgUpload = function(input) {
 };
 
 // ==========================================
-// 15. 核心：大頭貼即時上傳與角色記憶引擎
+// 15. 核心：大頭貼雲端同步與全端動態記憶引擎（完全體）
 // ==========================================
 window.updateRoleUI = function() {
     const roleTextEl = document.getElementById('role-text');
-    const avatarEl = document.getElementById('user-avatar');
+    const boardBfAvatar = document.getElementById('board-bf-avatar');
+    const boardGfAvatar = document.getElementById('board-gf-avatar');
 
-    if (roleTextEl && avatarEl) {
+    const defaultBf = "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80";
+    const defaultGf = "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80";
+    
+    let cloudBfAvatar = null;
+    let cloudGfAvatar = null;
+    
+    // 💡 從雲端原始資料陣列中，精準擷取隱藏的大頭貼
+    if (Array.isArray(state.rawCloudData)) {
+        const bfLog = state.rawCloudData.find(t => t.title === "🤖 SYSTEM_AVATAR_BOYFRIEND");
+        const gfLog = state.rawCloudData.find(t => t.title === "🤖 SYSTEM_AVATAR_GIRLFRIEND");
+        if (bfLog) cloudBfAvatar = bfLog.category; 
+        if (gfLog) cloudGfAvatar = gfLog.category;
+    }
+
+    const savedBfAvatar = cloudBfAvatar || localStorage.getItem('user_avatar_boyfriend') || defaultBf;
+    const savedGfAvatar = cloudGfAvatar || localStorage.getItem('user_avatar_girlfriend') || defaultGf;
+
+    // ⚡ 完美頂天立地灌入看板大頭貼（直徑 56px 卡滿垂直指示線高度）
+    if (boardBfAvatar) boardBfAvatar.src = savedBfAvatar;
+    if (boardGfAvatar) boardGfAvatar.src = savedGfAvatar;
+
+    // 右上角純文字視角同步
+    if (roleTextEl) {
         if (state.userRole === 'boyfriend') {
-            roleTextEl.innerText = "男友";
-            const savedBfAvatar = localStorage.getItem('user_avatar_boyfriend');
-            avatarEl.src = savedBfAvatar || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80";
+            roleTextEl.innerText = "男友視角";
         } else {
-            roleTextEl.innerText = "女友";
-            const savedGfAvatar = localStorage.getItem('user_avatar_girlfriend');
-            avatarEl.src = savedGfAvatar || "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80";
+            roleTextEl.innerText = "女友視角";
         }
     }
 };
@@ -838,25 +849,44 @@ document.addEventListener("DOMContentLoaded", () => {
 window.handleAvatarUpload = function(input) {
     if (input.files && input.files[0]) {
         const file = input.files[0];
-        if (file.size > 2 * 1024 * 1024) {
-            return alert('// 大頭貼請選擇 2MB 以下的圖片。');
+        
+        if (file.size > 1 * 1024 * 1024) {
+            return alert('// 為了雲端同步速度，請選擇 1MB 以下的精簡照片（或先截圖壓縮過再上傳）。');
         }
 
         const reader = new FileReader();
         reader.onload = function(e) {
             const base64Avatar = e.target.result;
-            const avatarEl = document.getElementById('user-avatar');
-            if (avatarEl) {
-                avatarEl.src = base64Avatar;
-                triggerHaptic(20);
-            }
-            const storageKey = state.userRole === 'boyfriend' ? 'user_avatar_boyfriend' : 'user_avatar_girlfriend';
-            try {
-                localStorage.setItem(storageKey, base64Avatar);
-            } catch (err) {
-                console.error('儲存頭像失敗:', err);
-                alert('圖片解析度過高，請裁剪後重試。');
-            }
+            const currentRole = state.userRole === 'boyfriend' ? 'boyfriend' : 'girlfriend';
+            const cloudTitle = `🤖 SYSTEM_AVATAR_${currentRole.toUpperCase()}`;
+            
+            localStorage.setItem(`user_avatar_${state.userRole}`, base64Avatar);
+            
+            (async () => {
+                alert('// 正在同步上傳頭像至雲端，請稍候... 🚀');
+                
+                await supabaseClient.from('transactions').delete().eq('title', cloudTitle);
+                
+                const { error } = await supabaseClient.from('transactions').insert([{
+                    title: cloudTitle,
+                    amount: 0,
+                    date: '雲端同步',
+                    by: state.userRole === 'boyfriend' ? '男友' : '女友',
+                    type: 'personal',
+                    category: base64Avatar, 
+                    status: 'approved',
+                    comments: []
+                }]);
+                
+                if (error) {
+                    console.error('雲端同步頭像失敗:', error);
+                    alert('本地更換成功，但同步到雲端失敗，請檢查網路。');
+                } else {
+                    alert('// 雲端頭像同步成功！✓\n另外一方重整網頁後就會看見你的新頭像囉！');
+                }
+                
+                await fetchTransactions();
+            })();
         };
         reader.readAsDataURL(file);
     }
